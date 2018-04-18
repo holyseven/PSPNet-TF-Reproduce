@@ -23,11 +23,10 @@ parser.add_argument('--norm_only', type=int, default=0,
 parser.add_argument('--data_type', type=int, default=32, help='float32 or float16')
 parser.add_argument('--database', type=str, default='CityScapes', help='SDB or CityScapes.')
 parser.add_argument('--resize_images_method', type=str, default='bilinear', help='resize images method: bilinear or nn')
-parser.add_argument('--color_switch', type=int, default=1, help='color switch or not')
+parser.add_argument('--color_switch', type=int, default=0, help='color switch or not')
 parser.add_argument('--eval_only', type=int, default=0, help='only do the evaluation (1) or do train and eval (0).')
 parser.add_argument('--log_dir', type=str, default='pspmg-0', help='according to gpu index and wd method')
 
-# for pspnet only
 parser.add_argument('--loss_type', type=str, default='normal', help='normal, focal_1, etc.')
 parser.add_argument('--structure_in_paper', type=int, default=0, help='first conv layers')
 parser.add_argument('--train_like_in_paper', type=int, default=0,
@@ -66,12 +65,12 @@ parser.add_argument('--fix_blocks', type=int, default=0,
                     help='number of blocks whose weights will be fixed when training')
 parser.add_argument('--save_first_iteration', type=int, default=0, help='whether saving the initial model')
 parser.add_argument('--fisher_epsilon', type=float, default=0, help='clip value for fisher regularization')
-parser.add_argument('--train_image_size', type=int, default=480, help='spatial size of inputs')
+parser.add_argument('--train_image_size', type=int, default=864, help='spatial size of inputs')
 parser.add_argument('--bn_frozen', type=int, default=0, help='freezing the statistics in existing bn layers')
 
 parser.add_argument('--test_max_iter', type=int, default=None, help='maximum test iteration')
 parser.add_argument('--test_batch_size', type=int, default=1, help='batch size used for test or validation')
-parser.add_argument('--test_image_size', type=int, default=528,
+parser.add_argument('--test_image_size', type=int, default=864,
                     help='spatial size of inputs for test. not used any longer')
 parser.add_argument('--mirror', type=int, default=1, help='whether adding the results from mirroring.')
 FLAGS = parser.parse_args()
@@ -429,12 +428,17 @@ def eval(i_ckpt):
 
     print '======================= eval process begins ========================='
     average_loss = 0.0
+
+    images_filenames = reader.image_list
+    labels_filenames = reader.label_list
+
     if FLAGS.test_max_iter is None:
-        max_iter = len(reader.image_list) / FLAGS.test_batch_size
+        max_iter = len(images_filenames) / FLAGS.test_batch_size
     else:
         max_iter = FLAGS.test_max_iter
 
     step = 0
+    image_index = 0
     confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
     while step < max_iter:
         step += 1
@@ -442,8 +446,9 @@ def eval(i_ckpt):
         image_batch = []
         label_batch = []
         for _ in range(FLAGS.test_batch_size):
-            filenames = sess.run(reader.queue)
-            image, label = cv2.imread(filenames[0], 1), cv2.imread(filenames[1], 0)
+            image, label = cv2.imread(images_filenames[image_index], 1), cv2.imread(labels_filenames[image_index], 0)
+            image_index += 1
+
             (image_height, image_width) = label.shape
             # print image.shape, label.shape  # (1024, 2048, 3) (1024, 2048)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # image: rgb
@@ -484,7 +489,7 @@ def eval(i_ckpt):
                     feed_dict=feed_dict
                 )
 
-                # print probability.shape  # (1, 720, 720, 19)
+                # print probability.shape  # (1, 864, 864, 19)
                 probabilities.append(probability)
 
         average_loss += loss
@@ -497,25 +502,22 @@ def eval(i_ckpt):
 
         if FLAGS.mirror == 1:
             mirror_proba = np.zeros((FLAGS.test_batch_size, image_height, image_width, num_classes), np.float32)
-
             image_mirror = image[:, :, ::-1]
-            label_mirror = label[:, :, ::-1]
 
             probabilities = []
             # print heights, widths
             for height in heights:
                 for width in widths:
                     image_crop = image_mirror[:, height:height + input_size, width:width + input_size]
-                    label_crop = label_mirror[:, height:height + input_size, width:width + input_size]
-                    feed_dict = {images_pl[0]: image_crop,
-                                 labels_pl[0]: label_crop}
+                    # label_crop = label_mirror[:, height:height + input_size, width:width + input_size]
+                    feed_dict = {images_pl[0]: image_crop}
                     [probability] = sess.run([
                         model.probabilities
                     ],
                         feed_dict=feed_dict
                     )
 
-                    # print probability.shape  # (1, 720, 720, 19)
+                    # print probability.shape  # (1, 864, 864, 19)
                     probabilities.append(probability)
 
             index = 0
