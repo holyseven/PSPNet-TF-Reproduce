@@ -136,7 +136,6 @@ def predict(i_ckpt):
 
     step = 0
     while step < max_iter:
-        step += 1
         image, label = cv2.imread(images_filenames[step], 1), cv2.imread(labels_filenames[step], 0)
         label = np.reshape(label, [1, label.shape[0], label.shape[1], 1])
         image_height, image_width = image.shape[0], image.shape[1]
@@ -228,6 +227,8 @@ def predict(i_ckpt):
             cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), prediction)
         else:
             pass
+
+        step += 1
 
         compute_confusion_matrix(label, prediction, confusion_matrix)
         if step % 20 == 0:
