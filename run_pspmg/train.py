@@ -392,6 +392,7 @@ def eval(i_ckpt):
             random_blur=False,
             random_rotate=False,
             color_switch=FLAGS.color_switch)
+        image_batch_op, label_batch_op = reader.dequeue_without_crops(FLAGS.test_batch_size)
 
     images_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 3])]
     labels_pl = [tf.placeholder(tf.int32, [None, input_size, input_size, 1])]
@@ -429,48 +430,18 @@ def eval(i_ckpt):
     print '======================= eval process begins ========================='
     average_loss = 0.0
 
-    images_filenames = reader.image_list
-    labels_filenames = reader.label_list
-
     if FLAGS.test_max_iter is None:
-        max_iter = len(images_filenames) / FLAGS.test_batch_size
+        max_iter = len(reader.image_list) / FLAGS.test_batch_size
     else:
         max_iter = FLAGS.test_max_iter
 
     step = 0
-    image_index = 0
     confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
     while step < max_iter:
         step += 1
 
-        image_batch = []
-        label_batch = []
-        for _ in range(FLAGS.test_batch_size):
-            image, label = cv2.imread(images_filenames[image_index], 1), cv2.imread(labels_filenames[image_index], 0)
-            image_index += 1
-
-            (image_height, image_width) = label.shape
-            # print image.shape, label.shape  # (1024, 2048, 3) (1024, 2048)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # image: rgb
-
-            image = np.float32(image)
-            image -= IMG_MEAN
-
-            if FLAGS.color_switch:
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)  # if switch, image: bgr
-
-            if image_height < input_size or image_width < input_size:
-                image, label = numpy_pad(image, label, image_height - input_size, image_width - input_size)
-                (image_height, image_width) = label.shape
-
-            image = np.reshape(image, [1, image_height, image_width, 3])
-            label = np.reshape(label, [1, image_height, image_width, 1])
-
-            image_batch.append(image)
-            label_batch.append(label)
-
-        image = np.concatenate(image_batch, axis=0)
-        label = np.concatenate(label_batch, axis=0)
+        [image, label] = sess.run([image_batch_op, label_batch_op])
+        image_height, image_width = image.shape[1], image.shape[2]
 
         heights = decide_intersection(image_height, input_size)
         widths = decide_intersection(image_width, input_size)

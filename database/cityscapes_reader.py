@@ -76,7 +76,7 @@ def random_crop_and_pad_image_and_labels(image, label, crop_h, crop_w, ignore_la
     img_crop = combined_crop[:, :, :last_image_dim]
     label_crop = combined_crop[:, :, last_image_dim:]
     label_crop = label_crop + ignore_label
-    label_crop = tf.cast(label_crop, dtype=tf.uint8)
+    # label_crop = tf.cast(label_crop, dtype=tf.uint8)
 
     # Set static shape so that tensorflow knows shape at compile time.
     img_crop.set_shape((crop_h, crop_w, 3))
@@ -213,8 +213,8 @@ def rotate_image_tensor(image, angle, mode='black'):
     return image_rotated
 
 
-def read_images_from_disk(input_queue, input_size, random_scale, random_mirror, random_blur,
-                          random_rotate, color_switch, scale_rate):  # optional pre-processing arguments
+def generate_crops_for_training(input_queue, input_size, random_scale, random_mirror, random_blur,
+                                random_rotate, color_switch, scale_rate):
     img_contents = tf.read_file(input_queue[0])
     label_contents = tf.read_file(input_queue[1])
 
@@ -352,12 +352,11 @@ class CityScapesReader(object):
         self.labels = tf.convert_to_tensor(self.label_list, dtype=tf.string)
         shuffle = ('train' == data_list) or 'train' in data_list
         self.queue = tf.train.slice_input_producer([self.images, self.labels], shuffle=shuffle, capacity=128)
-        self.image, self.label = read_images_from_disk(self.queue, self.input_size,
-                                                       random_scale, random_mirror, random_blur, random_rotate,
-                                                       color_switch, scale_rate=scale_rate
-                                                       )
+        self.image, self.label = generate_crops_for_training(self.queue, self.input_size,
+                                                             random_scale, random_mirror, random_blur, random_rotate,
+                                                             color_switch, scale_rate=scale_rate)
 
-    def dequeue(self, num_elements):
+    def dequeue(self, batch_size):
         """Pack images and labels into a batch.
 
         Args:
@@ -366,6 +365,25 @@ class CityScapesReader(object):
         Returns:
           Two tensors of size (batch_size, h, w, {3, 1}) for images and masks."""
         image_batch, label_batch = tf.train.batch([self.image, self.label],
-                                                  num_elements, num_elements * 4, 128 * num_elements)
+                                                  batch_size, batch_size * 4, 128 * batch_size)
 
         return image_batch, tf.cast(label_batch, dtype=tf.int32)
+
+    def dequeue_without_crops(self, batch_size, height=1024, width=2048):
+        img_contents = tf.read_file(self.queue[0])
+        img = tf.image.decode_png(img_contents, channels=3)  # r,g,b
+        img = tf.cast(img, dtype=tf.float32)
+        img -= IMG_MEAN
+        # [h, w, 3]
+
+        label_contents = tf.read_file(self.queue[1])
+        label = tf.image.decode_png(label_contents, channels=1)
+        # [h, w, 1]
+
+        img.set_shape((height, width, 3))
+        label.set_shape((height, width, 1))
+
+        image_batch, label_batch = tf.train.batch([img, label],
+                                                  batch_size, batch_size * 2, 4 * batch_size)
+        return image_batch, tf.cast(label_batch, dtype=tf.int32)
+
