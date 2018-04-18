@@ -20,17 +20,16 @@ parser.add_argument('--norm_only', type=int, default=0,
 parser.add_argument('--data_type', type=int, default=32, help='float32 or float16')
 parser.add_argument('--database', type=str, default='CityScapes', help='CityScapes.')
 parser.add_argument('--resize_images_method', type=str, default='bilinear', help='resize images method: bilinear or nn')
-parser.add_argument('--color_switch', type=int, default=1, help='color switch or not')
+parser.add_argument('--color_switch', type=int, default=0, help='color switch or not')
 parser.add_argument('--test_max_iter', type=int, default=None, help='maximum test iteration')
-parser.add_argument('--test_batch_size', type=int, default=1, help='batch size used for test or validation')
-parser.add_argument('--test_image_size', type=int, default=528,
+parser.add_argument('--test_image_size', type=int, default=864,
                     help='spatial size of inputs for test. not used any longer')
 parser.add_argument('--mode', type=str, default='val', help='test or val')
 parser.add_argument('--structure_in_paper', type=int, default=0, help='structure in paper')
 
 parser.add_argument('--weights_ckpt',
                     type=str,
-                    default='./log/SDB/coco-0-1/model.ckpt-30000',
+                    default='./save/1-extra-2/model.ckpt-50000',
                     help='ckpt file for loading the trained weights')
 parser.add_argument('--coloring', type=int, default=0, help='coloring the prediction and ground truth.')
 parser.add_argument('--mirror', type=int, default=1, help='whether adding the results from mirroring.')
@@ -86,7 +85,7 @@ def predict(i_ckpt):
                                    structure_in_paper=FLAGS.structure_in_paper,
                                    resize_images_method=FLAGS.resize_images_method
                                    )
-        logits = model.inference(images_pl)
+        l = model.inference(images_pl)
     # ========================= end of building model ================================
 
     gpu_options = tf.GPUOptions(allow_growth=False)
@@ -104,13 +103,10 @@ def predict(i_ckpt):
         print('Succesfully loaded model from %s at step=%s.' % (i_ckpt, eval_step))
 
     print '======================= eval process begins ========================='
-    average_loss = 0.0
-    if FLAGS.test_max_iter is None:
-        max_iter = len(reader.image_list) / FLAGS.test_batch_size
-    else:
-        max_iter = FLAGS.test_max_iter
+    if FLAGS.save_prediction == 0 and FLAGS.mode != 'test':
+        print 'not saving prediction ... '
 
-    step = 0
+    average_loss = 0.0
     confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
 
     if FLAGS.save_prediction == 1 or FLAGS.mode == 'test':
@@ -130,11 +126,18 @@ def predict(i_ckpt):
     else:
         scales = [1.0]
 
+    images_filenames = reader.image_list
+    labels_filenames = reader.label_list
+
+    if FLAGS.test_max_iter is None:
+        max_iter = len(images_filenames)
+    else:
+        max_iter = FLAGS.test_max_iter
+
+    step = 0
     while step < max_iter:
         step += 1
-
-        filenames = sess.run(reader.queue)
-        image, label = cv2.imread(filenames[0], 1), cv2.imread(filenames[1], 0)
+        image, label = cv2.imread(images_filenames[step], 1), cv2.imread(labels_filenames[step], 0)
         label = np.reshape(label, [1, label.shape[0], label.shape[1], 1])
         image_height, image_width = image.shape[0], image.shape[1]
 
@@ -143,7 +146,7 @@ def predict(i_ckpt):
             imgsplitter = ImageSplitter(image, scale, FLAGS.color_switch, image_size, IMG_MEAN)
             crops = imgsplitter.get_split_crops()
 
-            # This is a suboptimal solution. More batches each time, more rapid.
+            # This is a suboptimal solution. More batches each iter, more rapid.
             # But the limit of batch size is unknown.
             # TODO: Or there should be a more efficient way.
             if crops.shape[0] > 10:
@@ -212,7 +215,7 @@ def predict(i_ckpt):
         # print np.max(label), np.max(prediction)
 
         if FLAGS.database == 'CityScapes' and (FLAGS.save_prediction == 1 or FLAGS.mode == 'test'):
-            image_prefix = filenames[0].split('/')[-1].split('_leftImg8bit.png')[0] + '_' \
+            image_prefix = images_filenames[step].split('/')[-1].split('_leftImg8bit.png')[0] + '_' \
                            + FLAGS.weights_ckpt.split('/')[-2]
 
             cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), trainid_to_labelid(prediction))
@@ -221,10 +224,9 @@ def predict(i_ckpt):
                 cv2.imwrite(os.path.join(prefix, image_prefix + '_coloring.png'),
                             cv2.cvtColor(color_prediction, cv2.COLOR_BGR2RGB))
         elif FLAGS.database == 'SDB' and (FLAGS.save_prediction == 1 or FLAGS.mode == 'test'):
-            image_prefix = filenames[0].split('/')[-1] + '_' + FLAGS.weights_ckpt.split('/')[-2]
+            image_prefix = images_filenames[step].split('/')[-1] + '_' + FLAGS.weights_ckpt.split('/')[-2]
             cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), prediction)
         else:
-            print 'not saving prediction ... '
             pass
 
         compute_confusion_matrix(label, prediction, confusion_matrix)
