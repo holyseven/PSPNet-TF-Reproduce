@@ -347,6 +347,7 @@ class CityScapesReader(object):
         self.input_size = input_size
 
         self.image_list, self.label_list = read_labeled_image_list(self.data_dir, self.data_list)
+        assert len(self.image_list) > 0, 'No images are found.'
         print 'Database has %d images.' % len(self.image_list)
         self.images = tf.convert_to_tensor(self.image_list, dtype=tf.string)
         self.labels = tf.convert_to_tensor(self.label_list, dtype=tf.string)
@@ -357,7 +358,7 @@ class CityScapesReader(object):
                                                              color_switch, scale_rate=scale_rate)
 
     def dequeue(self, batch_size):
-        """Pack images and labels into a batch.
+        """Pack images and labels (crops) into a batch.
 
         Args:
           num_elements: the batch size.
@@ -370,6 +371,13 @@ class CityScapesReader(object):
         return image_batch, tf.cast(label_batch, dtype=tf.int32)
 
     def dequeue_without_crops(self, batch_size, height=1024, width=2048):
+        """Output original images and labels.
+
+        :param batch_size:
+        :param height:
+        :param width:
+        :return:
+        """
         img_contents = tf.read_file(self.queue[0])
         img = tf.image.decode_png(img_contents, channels=3)  # r,g,b
         img = tf.cast(img, dtype=tf.float32)
