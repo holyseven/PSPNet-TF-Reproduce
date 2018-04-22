@@ -5,7 +5,7 @@ import datetime
 import os
 
 import tensorflow as tf
-from experiment_manager.utils import LogDir
+from experiment_manager.utils import LogDir, sorted_str_dict
 from model import pspnet_mg
 import math
 import numpy as np
@@ -211,20 +211,20 @@ def train(resume_step=None):
         # This can transform .npy weights with variables names being the same to the tf ckpt model.
         fine_tune_variables = []
         npy_dict = np.load(FLAGS.fine_tune_filename).item()
-        new_layers_names = model.new_layers_names
-        new_layers_names.append('Momentum')
+        new_layers_names = ['Momentum']
         for v in tf.global_variables():
+            print '=====Saving initial snapshot process:',
             if any(elem in v.name for elem in new_layers_names):
-                print '=====Saving initial snapshot process: not import', v.name
+                print 'not import', v.name
                 continue
 
             name = v.name.split(':0')[0]
             if name not in npy_dict:
-                print '=====Saving initial snapshot process: not find ', v.name
+                print 'not find', v.name
                 continue
 
             v.load(npy_dict[name], sess)
-            print '=====Saving initial snapshot process: saving %s' % v.name
+            print 'saving', v.name
             fine_tune_variables.append(v)
 
         saver = tf.train.Saver(var_list=fine_tune_variables)
@@ -260,7 +260,7 @@ def train(resume_step=None):
     print '=========================== training process begins ================================='
     f_log = open(logdir.exp_dir + '/' + str(datetime.datetime.now()) + '.txt', 'w')
     f_log.write('step,loss,precision,wd\n')
-    f_log.write(str(FLAGS.__dict__) + '\n')
+    f_log.write(sorted_str_dict(FLAGS.__dict__) + '\n')
 
     average_loss = 0.0
     show_period = 20
@@ -518,7 +518,7 @@ def main(_):
     # ============================================================================
     # ============================= TRAIN ========================================
     # ============================================================================
-    print FLAGS.__dict__
+    print(sorted_str_dict(FLAGS.__dict__))
     if FLAGS.resume_step is not None:
         print 'Ready to resume from step %d.' % FLAGS.resume_step
 
@@ -529,7 +529,7 @@ def main(_):
         logdir.print_all_info()
         f_log = open(logdir.exp_dir + '/' + str(datetime.datetime.now()) + '.txt', 'w')
         f_log.write('step,loss,precision,wd\n')
-        f_log.write(str(FLAGS.__dict__) + '\n')
+        f_log.write(sorted_str_dict(FLAGS.__dict__) + '\n')
     else:
         f_log, logdir, has_nan = train(FLAGS.resume_step)
 

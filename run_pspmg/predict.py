@@ -10,6 +10,7 @@ import numpy as np
 import cv2
 from database.helper_cityscapes import trainid_to_labelid, coloring
 from database.helper_segmentation import *
+from experiment_manager.utils import sorted_str_dict
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -134,6 +135,8 @@ def predict(i_ckpt):
     else:
         max_iter = FLAGS.test_max_iter
 
+    # IMG_MEAN = [123.680000305, 116.778999329, 103.939002991]  # RGB mean from official PSPNet
+
     step = 0
     while step < max_iter:
         image, label = cv2.imread(images_filenames[step], 1), cv2.imread(labels_filenames[step], 0)
@@ -245,7 +248,7 @@ def predict(i_ckpt):
 
 
 def main(_):
-    print FLAGS.__dict__
+    print(sorted_str_dict(FLAGS.__dict__))
 
     # ============================================================================
     # ===================== Prediction =========================
