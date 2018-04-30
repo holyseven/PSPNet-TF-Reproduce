@@ -6,7 +6,7 @@ import os
 import glob
 import ast
 
-list_toprint = ['network', 'fine_tune_filename', 'database', 'examples_per_class', 'lrn_rate', 'train_max_iter', 'weight_decay_mode',
+list_toprint = ['fine_tune_filename', 'database', 'lrn_rate', 'train_max_iter', 'weight_decay_mode',
                 'weight_decay_rate', 'weight_decay_rate2', 'batch_size', 'train_image_size', 'initializer']
 
 
@@ -100,6 +100,7 @@ class ExpLog(object):
                 if filters[e] != self.hyperp_dict[e]:
                     return
 
+        print(self.logfile_path[-1].split('/')[-2], '\t', end='')
         for e in list_toprint:
             print(self.hyperp_dict.get(e, '?'), '\t', end='')
         print(self.best_precision, '\t', self.best_loss)
