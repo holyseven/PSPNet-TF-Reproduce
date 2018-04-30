@@ -487,6 +487,7 @@ def get_transpose_weights(weights_shape):
 
 def conv2d_transpose(name, list_input, out_channels=None,
                      ksize=4, stride=2, data_format='NHWC', trainable=True):
+    # TODO: This does not perform the same as resize_image. check the difference.
     assert type(list_input) == list
     strides = [1, stride, stride, 1]
     list_output = []
@@ -500,15 +501,15 @@ def conv2d_transpose(name, list_input, out_channels=None,
         out_channels = in_features
 
     # Compute shape out of Bottom
-    in_shape = tf.shape(list_input[0])
+    in_shape = list_input[0].get_shape()
 
     if data_format == 'NHWC':
-        h = ((in_shape[1] - 1) * stride) + 1
-        w = ((in_shape[2] - 1) * stride) + 1
+        h = in_shape[1] * stride
+        w = in_shape[2] * stride
         new_shape = [in_shape[0], h, w, out_channels]
     else:  # NCHW
-        h = ((in_shape[2] - 1) * stride) + 1
-        w = ((in_shape[3] - 1) * stride) + 1
+        h = in_shape[2] * stride
+        w = in_shape[3] * stride
         new_shape = [in_shape[0], out_channels, h, w]
 
     output_shape = tf.stack(new_shape)
@@ -517,6 +518,9 @@ def conv2d_transpose(name, list_input, out_channels=None,
     weights = get_transpose_weights(weights_shape)
     with tf.variable_scope(name):
         init_conv2dt_weights = tf.constant(weights, dtype=tf.float32)
+        if trainable:
+            print 'training conv2d_transpose layer: ', tf.get_variable_scope().name
+
     tf.add_to_collection('init_conv2dt_weights', init_conv2dt_weights)
 
     init = tf.constant_initializer(value=weights,
@@ -527,10 +531,9 @@ def conv2d_transpose(name, list_input, out_channels=None,
             with tf.variable_scope(name, reuse=(i>0)):
                 var = tf.get_variable(name='weights', initializer=init,
                                       shape=weights.shape, trainable=trainable)
-                if trainable:
-                    print 'training conv2d_transpose layer: ', tf.get_variable_scope().name
                 deconv = tf.nn.conv2d_transpose(list_input[i], var, output_shape,
                                                 strides=strides, padding='SAME', data_format=data_format)
+                deconv.set_shape(new_shape)
                 list_output.append(deconv)
 
     return list_output

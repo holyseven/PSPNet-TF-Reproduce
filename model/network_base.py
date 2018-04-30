@@ -134,7 +134,7 @@ class Network(object):
                             if elem.name.split('/Const')[0] == name:
                                 pre_trained_weights = elem
                                 break
-                        print v, pre_trained_weights
+                        # print v, pre_trained_weights
 
                     l2_losses_existing_layers += tf.nn.l2_loss(v - pre_trained_weights)
             return self.wd_rate_placeholder * l2_losses_existing_layers \
