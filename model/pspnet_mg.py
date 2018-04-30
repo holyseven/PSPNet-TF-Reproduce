@@ -14,7 +14,8 @@ class PSPNetMG(resnet.ResNet):
                  norm_only=False, gpu_num=1, fisher_epsilon=0, data_format='NHWC',
                  resnet='resnet_v1_101', strides=None, filters=None, num_residual_units=None, rate=None,
                  float_type=tf.float32, has_aux_loss=True, train_like_in_paper=True, structure_in_paper=False,
-                 resize_images_method='bilinear', new_layer_names=None, loss_type='normal'):
+                 resize_images_method='bilinear', new_layer_names=None, loss_type='normal',
+                 train_conv2dt=False):
         """ResNet constructor.
         Args:
           mode: One of 'train' and 'test'.
@@ -41,6 +42,7 @@ class PSPNetMG(resnet.ResNet):
         if mode != 'train':
             self.has_aux_loss = False
 
+        self.train_conv2dt = train_conv2dt
         self.train_like_in_paper = train_like_in_paper
         self.structure_in_paper = structure_in_paper
         self.resize_images_method = resize_images_method
@@ -173,8 +175,14 @@ class PSPNetMG(resnet.ResNet):
                                                             data_format=self.data_format, initializer=self.initializer,
                                                             float_type=self.float_type)
 
-                        self.auxiliary_x = utils.resize_images(auxiliary_x, image_shape, self.data_format)
-                        print ' auxiliary_x for loss function: ', self.auxiliary_x[0].get_shape()
+                    with tf.variable_scope('aux_up_sample'):
+                        self.auxiliary_x = utils.resize_images(auxiliary_x,
+                                                               self.image_shape[1:3] if self.data_format == 'NHWC'
+                                                               else self.image_shape[2:4],
+                                                               self.data_format,
+                                                               self.resize_images_method,
+                                                               self.train_conv2dt)
+                    print ' auxiliary_x for loss function: ', self.auxiliary_x[0].get_shape()
 
                 # psp operations, after block4/unit3, add psp/pool6321/ and block4/unit4.
                 if block_index + 1 == 4 and unit_index + 1 == 3:
@@ -231,14 +239,17 @@ class PSPNetMG(resnet.ResNet):
                                            data_format=self.data_format, initializer=self.initializer,
                                            float_type=self.float_type)
 
+        with tf.variable_scope('up_sample'):
             self.logits = utils.resize_images(logits,
                                               self.image_shape[1:3] if self.data_format == 'NHWC'
                                               else self.image_shape[2:4],
                                               self.data_format,
-                                              self.resize_images_method)
-            print 'logits: ', self.logits[0].get_shape()
-            self.probabilities = tf.nn.softmax(self.logits[0], dim=1 if self.data_format == 'NCHW' else 3)
-            self.predictions = tf.argmax(self.logits[0], axis=1 if self.data_format == 'NCHW' else 3)
+                                              self.resize_images_method,
+                                              self.train_conv2dt)
+
+        print 'logits: ', self.logits[0].get_shape()
+        self.probabilities = tf.nn.softmax(self.logits[0], dim=1 if self.data_format == 'NCHW' else 3)
+        self.predictions = tf.argmax(self.logits[0], axis=1 if self.data_format == 'NCHW' else 3)
 
         print '================== network constructed ===================='
         return self.logits
@@ -293,12 +304,9 @@ class PSPNetMG(resnet.ResNet):
                     aux_l = tf.reshape(self.auxiliary_x[i], [-1, self.num_classes])
                     aux_l = tf.gather(aux_l, indice)
 
-                    if self.loss_type == 'normal':
-                        auxiliary_loss = self._normal_loss(aux_l, label)
-                    elif self.loss_type == 'focal_1':
+                    auxiliary_loss = self._normal_loss(aux_l, label)
+                    if self.loss_type == 'focal_1':
                         auxiliary_loss = self._focal_loss_1(aux_l, label)
-                    else:
-                        auxiliary_loss = self._normal_loss(aux_l, label)
 
                     total_auxiliary_loss += auxiliary_loss
 

@@ -38,10 +38,16 @@ def input_data(list_images, data_format):
         return list_output
 
 
-def resize_images(list_images, output_size, data_format, method='bilinear'):
+def resize_images(list_images, output_size, data_format, method='bilinear', train_conv2dt=False, stride_conv2dt=8):
     assert type(list_images) == list
 
     list_output = []
+    if train_conv2dt:
+        return conv2d_transpose('conv_transpose', list_images,
+                                ksize=stride_conv2dt // 2,
+                                stride=stride_conv2dt,
+                                data_format=data_format)
+
     for i in range(len(list_images)):
         with tf.device('/gpu:%d' % i):
             if data_format == 'NCHW':
@@ -459,32 +465,28 @@ def conv_bias_relu(list_input, out_channels, kernel_size, stride, trainable=True
         return list_bias
 
 
-def conv2d_transpose(name, list_input, out_channels,
-                  ksize=4, stride=2, data_format='NHWC', trainable=False):
-    def get_transpose_filter(weights_shape, trainable):
-        # TODO: check what is the difference between this and resize_images. => it is trainable? the only difference?
-        # weights_shape: [height, width, output_channels, in_channels]
-        from math import ceil
-        import numpy as np
-        width = weights_shape[0]
-        height = weights_shape[1]
-        f = ceil(width / 2.0)
-        c = (2 * f - 1 - f % 2) / (2.0 * f)
-        bilinear = np.zeros([weights_shape[0], weights_shape[1]])
-        for x in range(width):
-            for y in range(height):
-                value = (1 - abs(x / f - c)) * (1 - abs(y / f - c))
-                bilinear[x, y] = value
-        weights = np.zeros(weights_shape)
-        for i in range(weights_shape[2]):
-            weights[:, :, i, i] = bilinear
+def get_transpose_weights(weights_shape):
+    # TODO: check what is the difference between this and resize_images. => it is trainable? the only difference?
+    # weights_shape: [height, width, output_channels, in_channels]
+    from math import ceil
+    width = weights_shape[0]
+    height = weights_shape[1]
+    f = ceil(width / 2.0)
+    c = (2 * f - 1 - f % 2) / (2.0 * f)
+    bilinear = np.zeros([weights_shape[0], weights_shape[1]])
+    for x in range(width):
+        for y in range(height):
+            value = (1 - abs(x / f - c)) * (1 - abs(y / f - c))
+            bilinear[x, y] = value
+    weights = np.zeros(weights_shape)
+    for i in range(weights_shape[2]):
+        weights[:, :, i, i] = bilinear
 
-        init = tf.constant_initializer(value=weights,
-                                       dtype=tf.float32)
-        var = tf.get_variable(name='weights', initializer=init,
-                              shape=weights.shape, trainable=trainable)
-        return var
+    return weights
 
+
+def conv2d_transpose(name, list_input, out_channels=None,
+                     ksize=4, stride=2, data_format='NHWC', trainable=True):
     assert type(list_input) == list
     strides = [1, stride, stride, 1]
     list_output = []
@@ -493,6 +495,9 @@ def conv2d_transpose(name, list_input, out_channels,
         in_features = list_input[0].get_shape()[3].value
     else:  # NCHW
         in_features = list_input[0].get_shape()[1].value
+
+    if out_channels is None:
+        out_channels = in_features
 
     # Compute shape out of Bottom
     in_shape = tf.shape(list_input[0])
@@ -509,14 +514,22 @@ def conv2d_transpose(name, list_input, out_channels,
     output_shape = tf.stack(new_shape)
     weights_shape = [ksize, ksize, out_channels, in_features]
 
+    weights = get_transpose_weights(weights_shape)
+    with tf.variable_scope(name):
+        init_conv2dt_weights = tf.constant(weights, dtype=tf.float32)
+    tf.add_to_collection('init_conv2dt_weights', init_conv2dt_weights)
+
+    init = tf.constant_initializer(value=weights,
+                                   dtype=tf.float32)
+
     for i in range(len(list_input)):
         with tf.device('/gpu:%d' % i):
             with tf.variable_scope(name, reuse=(i>0)):
-
-                weights = get_transpose_filter(weights_shape, trainable)
+                var = tf.get_variable(name='weights', initializer=init,
+                                      shape=weights.shape, trainable=trainable)
                 if trainable:
-                    print 'training conv2d_transpose layer: ', name
-                deconv = tf.nn.conv2d_transpose(list_input[i], weights, output_shape,
+                    print 'training conv2d_transpose layer: ', tf.get_variable_scope().name
+                deconv = tf.nn.conv2d_transpose(list_input[i], var, output_shape,
                                                 strides=strides, padding='SAME', data_format=data_format)
                 list_output.append(deconv)
 

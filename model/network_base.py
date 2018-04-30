@@ -13,6 +13,7 @@ class Network(object):
         self.mode = mode
         self.global_step = None
         self._extra_train_ops = []
+        self._extra_loss = []
         self.fix_blocks = fix_blocks
         self.num_classes = num_classes
         self.fine_tune_filename = fine_tune_filename
@@ -68,6 +69,8 @@ class Network(object):
             optimizer = tf.train.GradientDescentOptimizer(self.lrn_rate_placeholder)
         elif self.optimizer == 'mom':
             optimizer = tf.train.MomentumOptimizer(self.lrn_rate_placeholder, self.momentum)
+        elif self.optimizer == 'adam':
+            optimizer = tf.train.AdamOptimizer(self.lrn_rate_placeholder, self.momentum)
         else:
             print 'unknown optimizer name: ', self.optimizer
             print 'Default to Momentum.'
@@ -93,6 +96,8 @@ class Network(object):
     def _decay(self, mode):
         """L2 weight decay loss."""
         print '================== weight decay info   ===================='
+        list_conv2dt = tf.get_collection('init_conv2dt_weights')
+
         if mode == 0:
             print 'Applying L2 regularization...'
             l2_losses_existing_layers = 0.0
@@ -121,7 +126,16 @@ class Network(object):
                     print v.name
 
                     name = v.name.split(':')[0]
-                    pre_trained_weights = reader.get_tensor(name)
+                    if reader.has_tensor(name):
+                        pre_trained_weights = reader.get_tensor(name)
+                    else:
+                        name = name.split('/weights')[0]
+                        for elem in list_conv2dt:
+                            if elem.name.split('/Const')[0] == name:
+                                pre_trained_weights = elem
+                                break
+                        print v, pre_trained_weights
+
                     l2_losses_existing_layers += tf.nn.l2_loss(v - pre_trained_weights)
             return self.wd_rate_placeholder * l2_losses_existing_layers \
                    + self.wd_rate_placeholder2 * l2_losses_new_layers

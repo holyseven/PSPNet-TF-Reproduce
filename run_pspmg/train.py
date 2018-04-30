@@ -27,6 +27,7 @@ parser.add_argument('--color_switch', type=int, default=0, help='color switch or
 parser.add_argument('--eval_only', type=int, default=0, help='only do the evaluation (1) or do train and eval (0).')
 parser.add_argument('--log_dir', type=str, default='pspmg-0', help='according to gpu index and wd method')
 
+parser.add_argument('--train_conv2dt', type=int, default=0, help='train conv2dt instead of using resize images.')
 parser.add_argument('--loss_type', type=str, default='normal', help='normal, focal_1, etc.')
 parser.add_argument('--structure_in_paper', type=int, default=0, help='first conv layers')
 parser.add_argument('--train_like_in_paper', type=int, default=0,
@@ -38,7 +39,7 @@ parser.add_argument('--subsets_for_training', type=str, default='train', help='w
 parser.add_argument('--scale_min', type=float, default=0.5, help='random scale rate min')
 parser.add_argument('--scale_max', type=float, default=2.0, help='random scale rate max')
 parser.add_argument('--batch_size', type=int, default=1, help='batch size')
-parser.add_argument('--optimizer', type=str, default='mom', help='mom, sgd, more to be added')
+parser.add_argument('--optimizer', type=str, default='adam', help='mom, sgd, adam, more to be added')
 parser.add_argument('--poly_lr', type=int, default=1, help='poly learning rate policy')
 parser.add_argument('--lrn_rate', type=float, default=0.01, help='initial learning rate')
 parser.add_argument('--weight_decay_mode', type=int, default=1, help='weight decay mode')
@@ -153,7 +154,8 @@ def train(resume_step=None):
                          train_like_in_paper=FLAGS.train_like_in_paper,
                          structure_in_paper=FLAGS.structure_in_paper,
                          new_layer_names=new_layer_names,
-                         loss_type=FLAGS.loss_type)
+                         loss_type=FLAGS.loss_type,
+                         train_conv2dt=FLAGS.train_conv2dt)
         model.inference(images)
         model.build_train_op(labels)
 
@@ -203,10 +205,6 @@ def train(resume_step=None):
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
-    import_variables = tf.trainable_variables()
-    if FLAGS.fix_blocks > 0 or FLAGS.bn_frozen > 0:
-        import_variables = tf.global_variables()
-
     if '.npy' in FLAGS.fine_tune_filename:
         # This can transform .npy weights with variables names being the same to the tf ckpt model.
         fine_tune_variables = []
@@ -232,17 +230,22 @@ def train(resume_step=None):
 
         return
 
+    import_variables = tf.trainable_variables()
+    if FLAGS.fix_blocks > 0 or FLAGS.bn_frozen > 0:
+        import_variables = tf.global_variables()
+
     if FLAGS.fine_tune_filename is not None and resume_step is None:
         fine_tune_variables = []
         new_layers_names = model.new_layers_names
         new_layers_names.append('Momentum')
+        new_layers_names.append('up_sample')
         for v in import_variables:
             if any(elem in v.name for elem in new_layers_names):
                 print '=====Finetuning Process: not import %s' % v.name
                 continue
             fine_tune_variables.append(v)
 
-        loader = tf.train.Saver(var_list=fine_tune_variables)
+        loader = tf.train.Saver(var_list=fine_tune_variables, allow_empty=True)
         loader.restore(sess, FLAGS.fine_tune_filename)
         print('=====Succesfully loaded fine-tune model from %s.' % FLAGS.fine_tune_filename)
     elif resume_step is not None:
@@ -407,7 +410,8 @@ def eval(i_ckpt):
                          float_type=data_type,
                          has_aux_loss=False,
                          structure_in_paper=FLAGS.structure_in_paper,
-                         resize_images_method=FLAGS.resize_images_method
+                         resize_images_method=FLAGS.resize_images_method,
+                         train_conv2dt=FLAGS.train_conv2dt
                          )
         logits = model.inference(images_pl)
         model.compute_loss(labels_pl, logits)
