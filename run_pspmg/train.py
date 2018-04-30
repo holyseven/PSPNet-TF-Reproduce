@@ -39,7 +39,7 @@ parser.add_argument('--subsets_for_training', type=str, default='train', help='w
 parser.add_argument('--scale_min', type=float, default=0.5, help='random scale rate min')
 parser.add_argument('--scale_max', type=float, default=2.0, help='random scale rate max')
 parser.add_argument('--batch_size', type=int, default=1, help='batch size')
-parser.add_argument('--optimizer', type=str, default='adam', help='mom, sgd, adam, more to be added')
+parser.add_argument('--optimizer', type=str, default='mom', help='mom, sgd, adam, more to be added')
 parser.add_argument('--poly_lr', type=int, default=1, help='poly learning rate policy')
 parser.add_argument('--lrn_rate', type=float, default=0.01, help='initial learning rate')
 parser.add_argument('--weight_decay_mode', type=int, default=1, help='weight decay mode')
