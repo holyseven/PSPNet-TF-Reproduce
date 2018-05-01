@@ -3,7 +3,6 @@ import tensorflow as tf
 import math
 
 IGNORE_LABEL = 255
-IMG_MEAN = np.array((72.41519599, 82.93553322, 73.18188461), dtype=np.float32)  # RGB
 
 
 def image_scaling(img, label, scale_rate):
@@ -84,7 +83,7 @@ def random_crop_and_pad_image_and_labels(image, label, crop_h, crop_w, ignore_la
     return img_crop, label_crop
 
 
-def _read_labeled_image_list(data_dir, data_sub):
+def _read_cityscapes_image_label_list(data_dir, data_sub):
     if data_sub not in ['train', 'val', 'test', 'train_extra']:
         print 'data sub should be train, val, test or train_extra'
         return
@@ -105,7 +104,24 @@ def _read_labeled_image_list(data_dir, data_sub):
     return images, labels
 
 
-def read_labeled_image_list(data_dir, data_sub):
+def _read_sbd_image_label_list(data_dir, data_sub):
+    if data_sub not in ['train', 'val', 'test']:
+        print 'data sub should be train, val or test'
+        return
+    f = open(data_dir + '/' + data_sub + '.txt', 'r')
+    images = []
+    lables = []
+    for line in f:
+        try:
+            image, mask = line.strip("\n").split(' ')
+        except ValueError:  # Adhoc for test.
+            image = mask = line.strip("\n")
+        images.append(data_dir + image)
+        lables.append(data_dir + mask)
+    return images, lables
+
+
+def read_labeled_image_list(dataset, data_dir, data_sub):
     """Reads txt file containing paths to images and ground truth masks.
 
     Args:
@@ -115,16 +131,20 @@ def read_labeled_image_list(data_dir, data_sub):
     Returns:
       Two lists with all file names for images and masks, respectively.
     """
+    path_read_func = _read_cityscapes_image_label_list  # Cityscapes.
+    if dataset == 'SBD':
+        path_read_func = _read_sbd_image_label_list  # SBD
+
     if type(data_sub) is list:
         # use more for training.
         images, labels = [], []
         for each_data_set in data_sub:
-            each_image_set, each_label_set = _read_labeled_image_list(data_dir, each_data_set)
+            each_image_set, each_label_set = path_read_func(data_dir, each_data_set)
             images += each_image_set
             labels += each_label_set
         return images, labels
     else:
-        return _read_labeled_image_list(data_dir, data_sub)
+        return path_read_func(data_dir, data_sub)
 
 
 def rotate_image_tensor(image, angle, mode='black'):
@@ -204,6 +224,8 @@ def rotate_image_tensor(image, angle, mode='black'):
             background_color = 1
         elif mode == 'white':
             background_color = 255
+        else:
+            background_color = 0
 
         image_rotated_channel_list.append(tf.sparse_to_dense(coord_new, [s[0], s[1]], image_chan_new_values,
                                                              background_color, validate_indices=False))
@@ -213,7 +235,7 @@ def rotate_image_tensor(image, angle, mode='black'):
     return image_rotated
 
 
-def generate_crops_for_training(input_queue, input_size, random_scale, random_mirror, random_blur,
+def generate_crops_for_training(input_queue, input_size, img_mean, random_scale, random_mirror, random_blur,
                                 random_rotate, color_switch, scale_rate):
     img_contents = tf.read_file(input_queue[0])
     label_contents = tf.read_file(input_queue[1])
@@ -227,7 +249,7 @@ def generate_crops_for_training(input_queue, input_size, random_scale, random_mi
         img = tf.image.random_contrast(img, lower=0.5, upper=1.0)
 
     # Extract mean.
-    img -= IMG_MEAN
+    img -= img_mean
 
     if color_switch:
         # this depends on the model we are using.
@@ -264,7 +286,7 @@ def generate_crops_for_training(input_queue, input_size, random_scale, random_mi
     return img, label
 
 
-def output_one_image(image_addr, label_addr, color_switch):
+def output_one_image(image_addr, label_addr, color_switch, img_mean):
     """
 
     :param image_addr:
@@ -278,7 +300,7 @@ def output_one_image(image_addr, label_addr, color_switch):
     img = tf.cast(img, dtype=tf.float32)
 
     # Extract mean.
-    img -= IMG_MEAN
+    img -= img_mean
 
     if color_switch:
         # this depends on the model we are using.
@@ -296,7 +318,7 @@ def output_one_image(image_addr, label_addr, color_switch):
     return tf.expand_dims(img, dim=0), tf.expand_dims(label, dim=0)
 
 
-def output_test_set(server, color_switch):
+def output_test_set(server, color_switch, img_mean):
     if server == 1:
         data_dir = '/c3d/d1/cityscape/'
     elif server == 2:
@@ -315,7 +337,7 @@ def output_test_set(server, color_switch):
     img = tf.cast(img, dtype=tf.float32)
 
     # Extract mean.
-    img -= IMG_MEAN
+    img -= img_mean
 
     if color_switch:
         # this depends on the model we are using.
@@ -327,33 +349,51 @@ def output_test_set(server, color_switch):
     return tf.expand_dims(img, dim=0), queue
 
 
-class CityScapesReader(object):
-    """Generic ImageReader which reads images and corresponding segmentation
-       masks from the disk, and enqueues them into a TensorFlow queue.
-    """
-
-    def __init__(self, server, data_list, input_size, random_scale,
-                 random_mirror, random_blur, random_rotate, color_switch, scale_rate=None):
-
+def find_data_path(server, dataset):
+    if dataset == 'Cityscapes':
+        img_mean = np.array((72.41519599, 82.93553322, 73.18188461), dtype=np.float32)  # RGB, Cityscapes.
+        num_classes = 19
         if server == 1:
             data_dir = '/c3d/d1/cityscape/'
         elif server == 2:
             data_dir = '/home/lab/lixuhong/data/cityscapes/'
         else:
             data_dir = '/home/jacques/workspace/database/cs'
+    elif dataset == 'SBD':
+        img_mean = np.array((122.67891434, 116.66876762, 104.00698793), dtype=np.float32)  # RGB, SBD/Pascal VOC.
+        num_classes = 21
+        if server == 1:
+            data_dir = '/c3d/d1/SDB_all/'
+        elif server == 2:
+            data_dir = '/home/lab/lixuhong/data/SDB_all/'
+        else:
+            data_dir = '/home/jacques/workspace/database/SDB_all'
+    else:
+        print("Unknown database %s" % dataset)
+        return
 
-        self.data_dir = data_dir
+    return data_dir, img_mean, num_classes
+
+
+class SegmentationImageReader(object):
+    """Generic ImageReader which reads images and corresponding segmentation
+       masks from the disk, and enqueues them into a TensorFlow queue.
+    """
+
+    def __init__(self, server, dataset, data_list, input_size, random_scale,
+                 random_mirror, random_blur, random_rotate, color_switch, scale_rate=None):
+        self.data_dir, self.img_mean, self.num_classes = find_data_path(server, dataset)
         self.data_list = data_list
         self.input_size = input_size
-
-        self.image_list, self.label_list = read_labeled_image_list(self.data_dir, self.data_list)
+        self.image_list, self.label_list = read_labeled_image_list(dataset, self.data_dir, self.data_list)
         assert len(self.image_list) > 0, 'No images are found.'
         print 'Database has %d images.' % len(self.image_list)
         self.images = tf.convert_to_tensor(self.image_list, dtype=tf.string)
         self.labels = tf.convert_to_tensor(self.label_list, dtype=tf.string)
-        shuffle = ('train' == data_list) or 'train' in data_list
+        shuffle = ('train' == self.data_list) or 'train' in self.data_list
         self.queue = tf.train.slice_input_producer([self.images, self.labels], shuffle=shuffle, capacity=128)
-        self.image, self.label = generate_crops_for_training(self.queue, self.input_size,
+
+        self.image, self.label = generate_crops_for_training(self.queue, self.input_size, self.img_mean,
                                                              random_scale, random_mirror, random_blur, random_rotate,
                                                              color_switch, scale_rate=scale_rate)
 
@@ -361,7 +401,7 @@ class CityScapesReader(object):
         """Pack images and labels (crops) into a batch.
 
         Args:
-          num_elements: the batch size.
+          batch_size: the batch size.
 
         Returns:
           Two tensors of size (batch_size, h, w, {3, 1}) for images and masks."""
@@ -381,7 +421,7 @@ class CityScapesReader(object):
         img_contents = tf.read_file(self.queue[0])
         img = tf.image.decode_png(img_contents, channels=3)  # r,g,b
         img = tf.cast(img, dtype=tf.float32)
-        img -= IMG_MEAN
+        img -= self.img_mean
         # [h, w, 3]
 
         label_contents = tf.read_file(self.queue[1])

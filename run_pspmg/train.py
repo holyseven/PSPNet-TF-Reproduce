@@ -11,6 +11,7 @@ import math
 import numpy as np
 import cv2
 from database.helper_segmentation import *
+from database.reader_segmentation import SegmentationImageReader
 
 import argparse
 parser = argparse.ArgumentParser()
@@ -21,7 +22,7 @@ parser.add_argument('--epsilon', type=float, default=0.00001, help='epsilon in b
 parser.add_argument('--norm_only', type=int, default=0,
                     help='no beta nor gamma in fused_bn (1). Or with beta and gamma(0).')
 parser.add_argument('--data_type', type=int, default=32, help='float32 or float16')
-parser.add_argument('--database', type=str, default='CityScapes', help='SDB or CityScapes.')
+parser.add_argument('--database', type=str, default='SBD', help='SBD or Cityscapes.')
 parser.add_argument('--resize_images_method', type=str, default='bilinear', help='resize images method: bilinear or nn')
 parser.add_argument('--color_switch', type=int, default=0, help='color switch or not')
 parser.add_argument('--eval_only', type=int, default=0, help='only do the evaluation (1) or do train and eval (0).')
@@ -35,7 +36,7 @@ parser.add_argument('--train_like_in_paper', type=int, default=0,
 parser.add_argument('--has_aux_loss', type=int, default=1, help='with(1) or without(0) auxiliary loss')
 parser.add_argument('--new_layer_names', type=str, default=None, help='with(1) or without(0) auxiliary loss')
 
-parser.add_argument('--subsets_for_training', type=str, default='train', help='whether use val set for training')
+parser.add_argument('--subsets_for_training', type=str, default='train,val', help='whether use val set for training')
 parser.add_argument('--scale_min', type=float, default=0.5, help='random scale rate min')
 parser.add_argument('--scale_max', type=float, default=2.0, help='random scale rate max')
 parser.add_argument('--batch_size', type=int, default=1, help='batch size')
@@ -92,22 +93,18 @@ def train(resume_step=None):
         print 'using tf.float32 ====================='
         data_type = tf.float32
 
-    if FLAGS.database == 'CityScapes':
-        from database.cityscapes_reader import CityScapesReader as ImageReader
-        num_classes = 19
-        data_list = FLAGS.subsets_for_training.split(',')
-        if len(data_list) < 1:
-            data_list = ['train']
-    else:
-        print("Unknown database %s" % FLAGS.database)
-        return
+    data_list = FLAGS.subsets_for_training.split(',')
+    if len(data_list) < 1:
+        data_list = ['train']
     print data_list
+
     images = []
     labels = []
 
     with tf.device('/cpu:0'):
-        reader = ImageReader(
+        reader = SegmentationImageReader(
             FLAGS.server,
+            FLAGS.database,
             data_list,
             (image_size, image_size),
             FLAGS.random_scale,
@@ -137,7 +134,7 @@ def train(resume_step=None):
     PSPModel = pspnet_mg.PSPNetMG
 
     with tf.variable_scope(resnet):
-        model = PSPModel(num_classes, lrn_rate_ph, wd_rate_ph, wd_rate2_ph,
+        model = PSPModel(reader.num_classes, lrn_rate_ph, wd_rate_ph, wd_rate2_ph,
                          mode='train', bn_epsilon=FLAGS.epsilon, resnet=resnet,
                          norm_only=FLAGS.norm_only,
                          initializer=FLAGS.initializer,
@@ -173,10 +170,10 @@ def train(resume_step=None):
     print 'iou precision shape: ', model.predictions.get_shape(), labels[0].get_shape()
     pred = tf.reshape(model.predictions, [-1, ])
     gt = tf.reshape(labels[0], [-1, ])
-    indices = tf.squeeze(tf.where(tf.less_equal(gt, num_classes - 1)), 1)
+    indices = tf.squeeze(tf.where(tf.less_equal(gt, reader.num_classes - 1)), 1)
     gt = tf.cast(tf.gather(gt, indices), tf.int32)
     pred = tf.gather(pred, indices)
-    precision_op, update_op = tf.contrib.metrics.streaming_mean_iou(pred, gt, num_classes=num_classes)
+    precision_op, update_op = tf.contrib.metrics.streaming_mean_iou(pred, gt, num_classes=reader.num_classes)
     # ========================= end of building model ================================
 
     step = 0
@@ -369,14 +366,6 @@ def eval(i_ckpt):
         print 'using tf.float32 ====================='
         data_type = tf.float32
 
-    if FLAGS.database == 'CityScapes':
-        from database.cityscapes_reader import CityScapesReader as ImageReader
-        from database.cityscapes_reader import IMG_MEAN
-        num_classes = 19
-    else:
-        print("Unknown database %s" % FLAGS.database)
-        return
-
     if 'pspnet' in FLAGS.network:
         input_size = FLAGS.test_image_size
         print '=====because using pspnet, the inputs have a fixed size and should be divided by 48:', input_size
@@ -386,8 +375,9 @@ def eval(i_ckpt):
         return
 
     with tf.device('/cpu:0'):
-        reader = ImageReader(
+        reader = SegmentationImageReader(
             FLAGS.server,
+            FLAGS.database,
             'val',
             (input_size, input_size),
             random_scale=False,
@@ -404,7 +394,7 @@ def eval(i_ckpt):
     PSPModel = pspnet_mg.PSPNetMG
 
     with tf.variable_scope(resnet):
-        model = PSPModel(num_classes, None, None, None,
+        model = PSPModel(reader.num_classes, None, None, None,
                          mode='val', bn_epsilon=FLAGS.epsilon, resnet=resnet,
                          norm_only=FLAGS.norm_only,
                          float_type=data_type,
@@ -440,7 +430,7 @@ def eval(i_ckpt):
         max_iter = FLAGS.test_max_iter
 
     step = 0
-    confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
+    confusion_matrix = np.zeros((reader.num_classes, reader.num_classes), dtype=np.int64)
     while step < max_iter:
         step += 1
 
@@ -468,7 +458,7 @@ def eval(i_ckpt):
                 probabilities.append(probability)
 
         average_loss += loss
-        total_proba = np.zeros((FLAGS.test_batch_size, image_height, image_width, num_classes), np.float32)
+        total_proba = np.zeros((FLAGS.test_batch_size, image_height, image_width, reader.num_classes), np.float32)
         index = 0
         for height in heights:
             for width in widths:
@@ -476,7 +466,7 @@ def eval(i_ckpt):
                 index += 1
 
         if FLAGS.mirror == 1:
-            mirror_proba = np.zeros((FLAGS.test_batch_size, image_height, image_width, num_classes), np.float32)
+            mirror_proba = np.zeros((FLAGS.test_batch_size, image_height, image_width, reader.num_classes), np.float32)
             image_mirror = image[:, :, ::-1]
 
             probabilities = []
