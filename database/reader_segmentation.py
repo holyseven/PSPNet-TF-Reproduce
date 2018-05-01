@@ -240,7 +240,7 @@ def generate_crops_for_training(input_queue, input_size, img_mean, random_scale,
     img_contents = tf.read_file(input_queue[0])
     label_contents = tf.read_file(input_queue[1])
 
-    img = tf.image.decode_png(img_contents, channels=3)  # r,g,b
+    img = tf.image.decode_image(img_contents, channels=3)  # r,g,b
     img = tf.cast(img, dtype=tf.float32)
 
     if random_blur:
@@ -296,7 +296,7 @@ def output_one_image(image_addr, label_addr, color_switch, img_mean):
     """
     img_contents = tf.read_file(image_addr)
 
-    img = tf.image.decode_png(img_contents, channels=3)  # r,g,b
+    img = tf.image.decode_image(img_contents, channels=3)  # r,g,b
     img = tf.cast(img, dtype=tf.float32)
 
     # Extract mean.
@@ -333,7 +333,7 @@ def output_test_set(server, color_switch, img_mean):
     print 'Database has %d images.' % len(images)
     img_contents = tf.read_file(queue[0])
 
-    img = tf.image.decode_png(img_contents, channels=3)  # r,g,b
+    img = tf.image.decode_image(img_contents, channels=3)  # r,g,b
     img = tf.cast(img, dtype=tf.float32)
 
     # Extract mean.
@@ -419,7 +419,7 @@ class SegmentationImageReader(object):
         :return:
         """
         img_contents = tf.read_file(self.queue[0])
-        img = tf.image.decode_png(img_contents, channels=3)  # r,g,b
+        img = tf.image.decode_image(img_contents, channels=3)  # r,g,b
         img = tf.cast(img, dtype=tf.float32)
         img -= self.img_mean
         # [h, w, 3]
