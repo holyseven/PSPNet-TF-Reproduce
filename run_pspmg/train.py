@@ -385,7 +385,6 @@ def eval(i_ckpt):
             random_blur=False,
             random_rotate=False,
             color_switch=FLAGS.color_switch)
-        image_batch_op, label_batch_op = reader.dequeue_without_crops(FLAGS.test_batch_size)
 
     images_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 3])]
     labels_pl = [tf.placeholder(tf.int32, [None, input_size, input_size, 1])]
@@ -423,77 +422,45 @@ def eval(i_ckpt):
 
     print '======================= eval process begins ========================='
     average_loss = 0.0
+    confusion_matrix = np.zeros((reader.num_classes, reader.num_classes), dtype=np.int64)
+
+    images_filenames = reader.image_list
+    labels_filenames = reader.label_list
+    img_mean = reader.img_mean
 
     if FLAGS.test_max_iter is None:
-        max_iter = len(reader.image_list) / FLAGS.test_batch_size
+        max_iter = len(images_filenames)
     else:
         max_iter = FLAGS.test_max_iter
 
     step = 0
-    confusion_matrix = np.zeros((reader.num_classes, reader.num_classes), dtype=np.int64)
     while step < max_iter:
         step += 1
+        image, label = cv2.imread(images_filenames[step], 1), cv2.imread(labels_filenames[step], 0)
+        label = np.reshape(label, [1, label.shape[0], label.shape[1], 1])
 
-        [image, label] = sess.run([image_batch_op, label_batch_op])
-        image_height, image_width = image.shape[1], image.shape[2]
-
-        heights = decide_intersection(image_height, input_size)
-        widths = decide_intersection(image_width, input_size)
-
-        probabilities = []
-        # print heights, widths
-        for height in heights:
-            for width in widths:
-                image_crop = image[:, height:height+input_size, width:width+input_size]
-                label_crop = label[:, height:height+input_size, width:width+input_size]
-                feed_dict = {images_pl[0]: image_crop,
-                             labels_pl[0]: label_crop}
-                [loss, probability] = sess.run([
-                    model.loss, model.probabilities
-                ],
-                    feed_dict=feed_dict
-                )
-
-                # print probability.shape  # (1, 864, 864, 19)
-                probabilities.append(probability)
-
-        average_loss += loss
-        total_proba = np.zeros((FLAGS.test_batch_size, image_height, image_width, reader.num_classes), np.float32)
-        index = 0
-        for height in heights:
-            for width in widths:
-                total_proba[:, height:height+input_size, width:width+input_size] += probabilities[index]
-                index += 1
-
+        imgsplitter = ImageSplitter(image, 1.0, FLAGS.color_switch, input_size, img_mean)
+        feed_dict = {images_pl[0]: imgsplitter.get_split_crops()}
+        [logits] = sess.run([
+            model.probabilities
+        ],
+            feed_dict=feed_dict
+        )
+        total_logits = imgsplitter.reassemble_crops(logits)
         if FLAGS.mirror == 1:
-            mirror_proba = np.zeros((FLAGS.test_batch_size, image_height, image_width, reader.num_classes), np.float32)
-            image_mirror = image[:, :, ::-1]
+            image_mirror = image[:, ::-1]
+            imgsplitter_mirror = ImageSplitter(image_mirror, 1.0, FLAGS.color_switch, input_size, img_mean)
+            feed_dict = {images_pl[0]: imgsplitter_mirror.get_split_crops()}
+            [logits_m] = sess.run([
+                model.probabilities
+            ],
+                feed_dict=feed_dict
+            )
+            logits_m = imgsplitter_mirror.reassemble_crops(logits_m)
+            total_logits += logits_m[:, ::-1]
 
-            probabilities = []
-            # print heights, widths
-            for height in heights:
-                for width in widths:
-                    image_crop = image_mirror[:, height:height + input_size, width:width + input_size]
-                    # label_crop = label_mirror[:, height:height + input_size, width:width + input_size]
-                    feed_dict = {images_pl[0]: image_crop}
-                    [probability] = sess.run([
-                        model.probabilities
-                    ],
-                        feed_dict=feed_dict
-                    )
-
-                    # print probability.shape  # (1, 864, 864, 19)
-                    probabilities.append(probability)
-
-            index = 0
-            for height in heights:
-                for width in widths:
-                    mirror_proba[:, height:height+input_size, width:width+input_size] += probabilities[index]
-                    index += 1
-            total_proba += mirror_proba[:, :, ::-1]
-
-        prediction = np.argmax(total_proba, axis=-1)
-        # print np.max(label), np.max(prediction)
+        prediction = np.argmax(total_logits, axis=-1)
+        step += 1
         compute_confusion_matrix(label, prediction, confusion_matrix)
         if step % 20 == 0:
             print '%s %s] %d / %d. iou updating' \
