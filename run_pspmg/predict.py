@@ -20,7 +20,7 @@ parser.add_argument('--epsilon', type=float, default=0.00001, help='epsilon in b
 parser.add_argument('--norm_only', type=int, default=0,
                     help='no beta nor gamma in fused_bn (1). Or with beta and gamma(0).')
 parser.add_argument('--data_type', type=int, default=32, help='float32 or float16')
-parser.add_argument('--database', type=str, default='CityScapes', help='CityScapes.')
+parser.add_argument('--database', type=str, default='Cityscapes', help='Cityscapes or SBD.')
 parser.add_argument('--resize_images_method', type=str, default='bilinear', help='resize images method: bilinear or nn')
 parser.add_argument('--color_switch', type=int, default=0, help='color switch or not')
 parser.add_argument('--test_max_iter', type=int, default=None, help='maximum test iteration')
@@ -210,7 +210,7 @@ def predict(i_ckpt):
         prediction = np.argmax(total_logits, axis=-1)
         # print np.max(label), np.max(prediction)
 
-        if FLAGS.database == 'CityScapes' and (FLAGS.save_prediction == 1 or FLAGS.mode == 'test'):
+        if FLAGS.database == 'Cityscapes' and (FLAGS.save_prediction == 1 or FLAGS.mode == 'test'):
             image_prefix = images_filenames[step].split('/')[-1].split('_leftImg8bit.png')[0] + '_' \
                            + FLAGS.weights_ckpt.split('/')[-2]
 
@@ -219,7 +219,7 @@ def predict(i_ckpt):
                 color_prediction = coloring(prediction)
                 cv2.imwrite(os.path.join(prefix, image_prefix + '_coloring.png'),
                             cv2.cvtColor(color_prediction, cv2.COLOR_BGR2RGB))
-        elif FLAGS.database == 'SDB' and (FLAGS.save_prediction == 1 or FLAGS.mode == 'test'):
+        elif FLAGS.database == 'SBD' and (FLAGS.save_prediction == 1 or FLAGS.mode == 'test'):
             image_prefix = images_filenames[step].split('/')[-1] + '_' + FLAGS.weights_ckpt.split('/')[-2]
             cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), prediction)
         else:
