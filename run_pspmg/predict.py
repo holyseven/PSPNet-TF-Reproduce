@@ -10,6 +10,7 @@ import numpy as np
 import cv2
 from database.helper_cityscapes import trainid_to_labelid, coloring
 from database.helper_segmentation import *
+from database.reader_segmentation import SegmentationImageReader
 from experiment_manager.utils import sorted_str_dict
 
 import argparse
@@ -51,21 +52,14 @@ def predict(i_ckpt):
         print 'using tf.float32 ====================='
         data_type = tf.float32
 
-    if FLAGS.database == 'CityScapes':
-        from database.cityscapes_reader import CityScapesReader as ImageReader
-        from database.cityscapes_reader import IMG_MEAN
-        num_classes = 19
-    else:
-        print("Unknown database %s" % FLAGS.database)
-        return
-
     image_size = FLAGS.test_image_size
     print '=====because using pspnet, the inputs have a fixed size and should be divided by 48:', image_size
     assert FLAGS.test_image_size % 48 == 0
 
     with tf.device('/cpu:0'):
-        reader = ImageReader(
+        reader = SegmentationImageReader(
             FLAGS.server,
+            FLAGS.database,
             FLAGS.mode,
             (image_size, image_size),
             random_scale=False,
@@ -78,7 +72,7 @@ def predict(i_ckpt):
     labels_pl = [tf.placeholder(tf.int32, [None, image_size, image_size, 1])]
 
     with tf.variable_scope('resnet_v1_101'):
-        model = pspnet_mg.PSPNetMG(num_classes, None, None, None,
+        model = pspnet_mg.PSPNetMG(reader.num_classes, None, None, None,
                                    mode='val', bn_epsilon=FLAGS.epsilon, resnet='resnet_v1_101',
                                    norm_only=FLAGS.norm_only,
                                    float_type=data_type,
@@ -108,7 +102,7 @@ def predict(i_ckpt):
         print 'not saving prediction ... '
 
     average_loss = 0.0
-    confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
+    confusion_matrix = np.zeros((reader.num_classes, reader.num_classes), dtype=np.int64)
 
     if FLAGS.save_prediction == 1 or FLAGS.mode == 'test':
         try:
@@ -143,9 +137,9 @@ def predict(i_ckpt):
         label = np.reshape(label, [1, label.shape[0], label.shape[1], 1])
         image_height, image_width = image.shape[0], image.shape[1]
 
-        total_logits = np.zeros((image_height, image_width, num_classes), np.float32)
+        total_logits = np.zeros((image_height, image_width, reader.num_classes), np.float32)
         for scale in scales:
-            imgsplitter = ImageSplitter(image, scale, FLAGS.color_switch, image_size, IMG_MEAN)
+            imgsplitter = ImageSplitter(image, scale, FLAGS.color_switch, image_size, reader.img_mean)
             crops = imgsplitter.get_split_crops()
 
             # This is a suboptimal solution. More batches each iter, more rapid.
@@ -179,7 +173,7 @@ def predict(i_ckpt):
 
             if FLAGS.mirror == 1:
                 image_mirror = image[:, ::-1]
-                imgsplitter_mirror = ImageSplitter(image_mirror, scale, FLAGS.color_switch, image_size, IMG_MEAN)
+                imgsplitter_mirror = ImageSplitter(image_mirror, scale, FLAGS.color_switch, image_size, reader.img_mean)
                 crops_m = imgsplitter_mirror.get_split_crops()
                 if crops_m.shape[0] > 10:
                     half = crops_m.shape[0] / 2
