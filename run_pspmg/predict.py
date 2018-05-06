@@ -220,8 +220,8 @@ def predict(i_ckpt):
                 cv2.imwrite(os.path.join(prefix, image_prefix + '_coloring.png'),
                             cv2.cvtColor(color_prediction, cv2.COLOR_BGR2RGB))
         elif FLAGS.database == 'SBD' and (FLAGS.save_prediction == 1 or FLAGS.mode == 'test'):
-            image_prefix = images_filenames[step].split('/')[-1] + '_' + FLAGS.weights_ckpt.split('/')[-2]
-            cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), prediction)
+            image_prefix = images_filenames[step].split('/')[-1].split('.jpg')[0]
+            cv2.imwrite(os.path.join(prefix, image_prefix + '.png'), prediction)
         else:
             pass
 
