@@ -26,7 +26,7 @@ test on [test set](https://www.cityscapes-dataset.com/method-details/?submission
 
 ### Qualitative Results
 
-![](https://github.com/holyseven/PSPNet-TF-Reproduce/results_examples/berlin_000000_000019_leftImg8bit.png)  |  ![](https://github.com/holyseven/PSPNet-TF-Reproduce/results_examples/berlin_000000_000019_30k-extra-wd1-0_coloring.png)
+![](https://github.com/holyseven/PSPNet-TF-Reproduce/blob/master/results_examples/berlin_000000_000019_leftImg8bit.png)  |  ![](https://github.com/holyseven/PSPNet-TF-Reproduce/blob/master/results_examples/berlin_000000_000019_30k-extra-wd1-0_coloring.png)
 
 ### Training
 
