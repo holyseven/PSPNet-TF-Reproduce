@@ -36,11 +36,11 @@ test on [test set](https://www.cityscapes-dataset.com/method-details/?submission
 
 2. Download resnet_v1_101.ckpt. The script in `./z_pretrained_weights/` can help do it.
 
-3. Run this training script under `./run_pspmg/` (4*2=8 examples in a batch, L2-SP regularization) for Cityscapes which follows an evaluation without multi-scale test.
+3. Run this training script under `./run_pspmg/` (4*2=8 examples in a batch, L2-SP regularization) for Cityscapes which follows an evaluation without multi-scale test. (details of all hyperparameters)
 
-`CUDA_VISIBLE_DEVICES=0,1,2,3 python ./train.py --subsets_for_training 'train' --ema_decay 0.9 --gpu_num 4 --network 'pspnet' --structure_in_paper 0 --train_like_in_paper 0 --initializer 'he' --color_switch 0 --poly_lr 1 --data_type 32 --lrn_rate 0.01 --weight_decay_mode 0 --weight_decay_rate 0.0001 --weight_decay_rate2 0.0001 --batch_size 2 --train_max_iter 50000 --snapshot 25000 --momentum 0.9 --random_scale 1 --scale_min 0.5 --scale_max 2.0 --random_rotate 0 --database 'Cityscapes' --server $s --fine_tune_filename '../z_pretrained_weights/resnet_v1_101.ckpt' --train_image_size 864 --test_image_size 864 --optimizer 'mom' --data_type 32 --log_dir only-resnet`
+`CUDA_VISIBLE_DEVICES=0,1,2,3 python ./train.py --subsets_for_training 'train' --ema_decay 0.9 --gpu_num 4 --network 'pspnet' --structure_in_paper 0 --train_like_in_paper 0 --initializer 'he' --color_switch 0 --poly_lr 1 --data_type 32 --lrn_rate 0.01 --weight_decay_mode 1 --weight_decay_rate 0.0001 --weight_decay_rate2 0.0001 --batch_size 2 --train_max_iter 50000 --snapshot 25000 --momentum 0.9 --random_scale 1 --scale_min 0.5 --scale_max 2.0 --random_rotate 0 --database 'Cityscapes' --server $s --fine_tune_filename '../z_pretrained_weights/resnet_v1_101.ckpt' --train_image_size 864 --test_image_size 864 --optimizer 'mom' --data_type 32 --log_dir only-resnet`
 
-4. An example of training script for Pascal VOC:
+4. An example of training script for Pascal VOC (details of all hyperparameters):
 
 `CUDA_VISIBLE_DEVICES=0,1,2,3 python ./train.py --subsets_for_training 'train' --ema_decay 0.9 --gpu_num 4 --network 'pspnet' --structure_in_paper 0 --train_like_in_paper 0 --initializer 'he' --color_switch 0 --poly_lr 1 --data_type 32 --lrn_rate 0.01 --weight_decay_mode 1 --weight_decay_rate 0.001 --weight_decay_rate2 0.0001 --batch_size 4 --train_max_iter 30000 --snapshot 15000 --momentum 0.9 --random_scale 1 --scale_min 0.5 --scale_max 2.0 --random_rotate 1 --database 'SBD' --server $s --fine_tune_filename '../z_pretrained_weights/resnet_v1_101.ckpt' --train_image_size 480 --test_image_size 480 --optimizer 'mom' --data_type 32 --log_dir only-resnet`
 
