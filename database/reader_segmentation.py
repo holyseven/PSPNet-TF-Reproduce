@@ -246,7 +246,7 @@ def generate_crops_for_training(input_queue, input_size, img_mean, random_scale,
     if random_blur:
         img = tf.image.random_brightness(img, max_delta=63. / 255.)
         img = tf.image.random_saturation(img, lower=0.5, upper=1.5)
-        img = tf.image.random_contrast(img, lower=0.5, upper=1.0)
+        img = tf.image.random_contrast(img, lower=0.2, upper=1.8)
 
     # Extract mean.
     img -= img_mean
