@@ -313,6 +313,9 @@ def bottleneck_residual(list_input, out_channels, stride, data_format,
         raise TypeError("Expecting an int for stride but %s is got." % stride)
     assert type(list_input) == list
     # ======================== Setting default values =========================
+    if stride > 1:
+        rate = 1  # because of atrous_conv2d.
+
     in_channels = list_input[0].get_shape().as_list()[-1]
     if data_format is 'NCHW':
         in_channels = list_input[0].get_shape().as_list()[1]
