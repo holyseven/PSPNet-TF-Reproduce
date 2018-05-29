@@ -54,6 +54,10 @@ def resize_images(list_images, output_size, data_format, method='bilinear', trai
                 _x = tf.transpose(list_images[i], [0, 2, 3, 1])
                 if method == 'nn':
                     _x = tf.image.resize_nearest_neighbor(_x, output_size)
+                elif method == 'area':
+                    _x = tf.image.resize_area(_x, output_size)
+                elif method == 'cubic':
+                    _x = tf.image.resize_bicubic(_x, output_size)
                 else:
                     # output always tf.float32.
                     _x = tf.image.resize_bilinear(_x, output_size)
@@ -62,6 +66,10 @@ def resize_images(list_images, output_size, data_format, method='bilinear', trai
             else:
                 if method == 'nn':
                     _x = tf.image.resize_nearest_neighbor(list_images[i], output_size)
+                elif method == 'area':
+                    _x = tf.image.resize_area(list_images[i], output_size)
+                elif method == 'cubic':
+                    _x = tf.image.resize_bicubic(list_images[i], output_size)
                 else:
                     # output always tf.float32.
                     _x = tf.image.resize_bilinear(list_images[i], output_size)
