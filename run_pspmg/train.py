@@ -152,7 +152,8 @@ def train(resume_step=None):
                          structure_in_paper=FLAGS.structure_in_paper,
                          new_layer_names=new_layer_names,
                          loss_type=FLAGS.loss_type,
-                         train_conv2dt=FLAGS.train_conv2dt)
+                         train_conv2dt=FLAGS.train_conv2dt,
+                         resize_images_method=FLAGS.resize_images_method)
         model.inference(images)
         model.build_train_op(labels)
 

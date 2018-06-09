@@ -94,6 +94,13 @@ def _read_cityscapes_image_label_list(data_dir, data_sub):
     labels_filename_proto = data_dir + '/gt/' + data_sub + '/*/*.png'
     labels = sorted(glob.glob(labels_filename_proto))
 
+    assert len(images) == len(labels), 'images and labels have different numbers of examples. ' \
+                                       'Suggestion: add more constraint on the filename_proto, ' \
+                                       'or move undesired images to other directory.'
+    # TODO: verify if incorrectly read labels containing labelIds [0, 34].
+    # For now, see the prepation at
+    # https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/preparation/createTrainIdInstanceImgs.py
+
     # for just checking they are corresponded.
     for i in range(len(images)):
         if images[i].split('leftImg8bit')[1] == labels[i].split('gt')[1]:
