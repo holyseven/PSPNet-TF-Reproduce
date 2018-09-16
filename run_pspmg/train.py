@@ -15,6 +15,7 @@ from database.reader_segmentation import SegmentationImageReader
 
 import argparse
 parser = argparse.ArgumentParser()
+parser.add_argument('--consider_dilated', type=int, default=0, help='consider dilated conv weights when using L2-SP.')
 parser.add_argument('--network', type=str, default='pspnet',
                     help='pspnet')
 parser.add_argument('--server', type=int, default=0, help='local machine 0 or server 1 or 2')
@@ -153,7 +154,8 @@ def train(resume_step=None):
                          new_layer_names=new_layer_names,
                          loss_type=FLAGS.loss_type,
                          train_conv2dt=FLAGS.train_conv2dt,
-                         resize_images_method=FLAGS.resize_images_method)
+                         resize_images_method=FLAGS.resize_images_method,
+                         consider_dilated=FLAGS.consider_dilated)
         model.inference(images)
         model.build_train_op(labels)
 

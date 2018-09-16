@@ -14,7 +14,7 @@ class PSPNetMG(resnet.ResNet):
                  norm_only=False, gpu_num=1, fisher_epsilon=0, data_format='NHWC',
                  resnet='resnet_v1_101', strides=None, filters=None, num_residual_units=None, rate=None,
                  float_type=tf.float32, has_aux_loss=True, train_like_in_paper=True, structure_in_paper=False,
-                 resize_images_method='bilinear', new_layer_names=None, loss_type='normal',
+                 resize_images_method='bilinear', new_layer_names=None, loss_type='normal', consider_dilated=False,
                  train_conv2dt=False):
         """ResNet constructor.
         Args:
@@ -52,6 +52,11 @@ class PSPNetMG(resnet.ResNet):
                                      'logits', 'psp']
         else:
             self.new_layers_names = new_layer_names
+
+        if consider_dilated:
+            self.sp_group = ['block3', 'block4', 'logits', 'psp']
+        else:
+            self.sp_group = self.new_layers_names
 
     def inference(self, images):
         print '================== Resnet structure ======================='
