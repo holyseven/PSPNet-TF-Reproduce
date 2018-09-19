@@ -161,7 +161,7 @@ class PSPNetMG(resnet.ResNet):
                                                   float_type=self.float_type)
 
                 # auxiliary loss operations, after block3/unit23, add block3/unit24 and auxiliary loss.
-                if block_index + 1 == 3 and unit_index + 1 == 23 and self.has_aux_loss:
+                if block_index + 1 == 3 and unit_index + 1 == self.num_residual_units[-2] and self.has_aux_loss:
                     with tf.variable_scope('block%d/unit_%d' % (block_index + 1, unit_index + 2)):
                         # new layers
                         auxiliary_x = utils.conv2d_same(x, 256, 3, 1, trainable=True, data_format=self.data_format,
@@ -190,7 +190,7 @@ class PSPNetMG(resnet.ResNet):
                     print ' auxiliary_x for loss function: ', self.auxiliary_x[0].get_shape()
 
                 # psp operations, after block4/unit3, add psp/pool6321/ and block4/unit4.
-                if block_index + 1 == 4 and unit_index + 1 == 3:
+                if block_index + 1 == 4 and unit_index + 1 == self.num_residual_units[-1]:
                     # 4 pooling layers.
                     to_concat = [x]
                     with tf.variable_scope('psp'):

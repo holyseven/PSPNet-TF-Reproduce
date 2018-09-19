@@ -51,7 +51,7 @@ parser.add_argument('--train_max_iter', type=int, default=9000, help='Maximum tr
 parser.add_argument('--snapshot', type=int, default=3000, help='snapshot every ')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum for mom optimizer')
 parser.add_argument('--fine_tune_filename', type=str,
-                    default='../z_pretrained_weights/resnet_v1_101.ckpt',
+                    default='../z_pretrained_weights/resnet_v1_50.ckpt',
                     help='fine_tune_filename')
 parser.add_argument('--fisher_filename', type=str, default='./fisher_exp.npy', help='filename of fisher matrix')
 parser.add_argument('--resume_step', type=int, default=None, help='resume step')
@@ -131,7 +131,7 @@ def train(resume_step=None):
         new_layer_names = new_layer_names.split(',')
     assert 'pspnet' in FLAGS.network
 
-    resnet = 'resnet_v1_101'
+    resnet = 'resnet_v1_50'
     PSPModel = pspnet_mg.PSPNetMG
 
     with tf.variable_scope(resnet):
