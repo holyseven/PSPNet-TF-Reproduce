@@ -16,8 +16,7 @@ from database.reader_segmentation import SegmentationImageReader
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--consider_dilated', type=int, default=0, help='consider dilated conv weights when using L2-SP.')
-parser.add_argument('--network', type=str, default='pspnet',
-                    help='pspnet')
+parser.add_argument('--network', type=str, default='resnet_v1_50', help='resnet_v1_50 or 101')
 parser.add_argument('--server', type=int, default=0, help='local machine 0 or server 1 or 2')
 parser.add_argument('--epsilon', type=float, default=0.00001, help='epsilon in bn layers')
 parser.add_argument('--norm_only', type=int, default=0,
@@ -131,7 +130,7 @@ def train(resume_step=None):
         new_layer_names = new_layer_names.split(',')
     assert 'pspnet' in FLAGS.network
 
-    resnet = 'resnet_v1_50'
+    resnet = FLAGS.network
     PSPModel = pspnet_mg.PSPNetMG
 
     with tf.variable_scope(resnet):
