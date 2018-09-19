@@ -128,7 +128,6 @@ def train(resume_step=None):
     new_layer_names = FLAGS.new_layer_names
     if FLAGS.new_layer_names is not None:
         new_layer_names = new_layer_names.split(',')
-    assert 'pspnet' in FLAGS.network
 
     resnet = FLAGS.network
     PSPModel = pspnet_mg.PSPNetMG
