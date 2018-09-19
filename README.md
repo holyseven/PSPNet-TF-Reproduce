@@ -35,7 +35,7 @@ This model gets 80.3 without post-processing methods on [Cityscapes test set (15
 
 (This is the process for reproducing PSPNet on Cityscapes and Pascal VOC. For fine-tuning on other databases, some additional changes for reading images and labels in `reader_segmentation.py` may be needed.)
 
-1. Before training, it would be better to change the path of database in `./database/reader_segmentation.py`, function `find_data_path`. For Cityscapes, verify whether the trainId is being used, see [here](https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/preparation/createTrainIdInstanceImgs.py).
+1. Before training, it would be better to change the path of database in `./database/reader_segmentation.py`, function `find_data_path`. For Cityscapes, verify whether the trainId is being used, see [here](https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/preparation/createTrainIdLabelImgs.py).
 
 2. Download resnet_v1_101.ckpt. The script in `./z_pretrained_weights/` can help do it.
 
