@@ -367,13 +367,9 @@ def eval(i_ckpt):
         print 'using tf.float32 ====================='
         data_type = tf.float32
 
-    if 'pspnet' in FLAGS.network:
-        input_size = FLAGS.test_image_size
-        print '=====because using pspnet, the inputs have a fixed size and should be divided by 48:', input_size
-        assert FLAGS.test_image_size % 48 == 0
-    else:
-        input_size = None
-        return
+    input_size = FLAGS.test_image_size
+    print '=====because using pspnet, the inputs have a fixed size and should be divided by 48:', input_size
+    assert FLAGS.test_image_size % 48 == 0
 
     with tf.device('/cpu:0'):
         reader = SegmentationImageReader(
@@ -390,7 +386,7 @@ def eval(i_ckpt):
     images_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 3])]
     labels_pl = [tf.placeholder(tf.int32, [None, input_size, input_size, 1])]
 
-    resnet = 'resnet_v1_101'
+    resnet = FLAGS.network 
     PSPModel = pspnet_mg.PSPNetMG
 
     with tf.variable_scope(resnet):
