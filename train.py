@@ -23,7 +23,7 @@ parser.add_argument('--gpu_num', type=int, default=1, help='gpu num')
 parser.add_argument('--consider_dilated', type=int, default=0, help='consider dilated conv weights when using L2-SP.')
 parser.add_argument('--network', type=str, default='resnet_v1_50', help='resnet_v1_50 or 101')
 parser.add_argument('--database', type=str, default='SBD', help='SBD, Cityscapes or ADE.')
-parser.add_argument('--subsets_for_training', type=str, default='train,val', help='whether use val set for training')
+parser.add_argument('--subsets_for_training', type=str, default='train', help='whether use val set for training')
 parser.add_argument('--batch_size', type=int, default=1, help='batch size')
 parser.add_argument('--weight_decay_mode', type=int, default=1, help='weight decay mode')
 parser.add_argument('--weight_decay_rate', type=float, default=0.01, help='weight decay rate for existing layers')
@@ -89,30 +89,29 @@ def get_available_gpus(gpu_num):
         output = run_command("nvidia-smi -L")
         # lines of the form GPU 0: TITAN X
         gpu_regex = re.compile(r"GPU (?P<gpu_id>\d+):")
-        result = []
+        num_gpus = 0
         for line in output.strip().split("\n"):
             m = gpu_regex.match(line)
             assert m, "Couldnt parse " + line
-            result.append(int(m.group("gpu_id")))
-        return result
+            num_gpus += 1
+        return num_gpus
 
     def gpu_memory_map():
         """Returns map of GPU id to memory allocated on that GPU."""
-
         output = run_command("nvidia-smi")
         gpu_output = output[output.find("GPU Memory"):]
         # lines of the form
         # |    0      8734    C   python                                       11705MiB |
         memory_regex = re.compile(r"[|]\s+?(?P<gpu_id>\d+)\D+?(?P<pid>\d+).+[ ](?P<gpu_memory>\d+)MiB")
         rows = gpu_output.split("\n")
-        result = range(len(list_available_gpus()))
+        result = range(list_available_gpus())
         for row in rows:
             m = memory_regex.search(row)
             if not m:
                 continue
             gpu_id = int(m.group("gpu_id"))
             gpu_memory = int(m.group("gpu_memory"))
-            if gpu_memory < 1000:
+            if gpu_memory < 1000:  # less than 1000 Mb is being used.
                 continue
             else:
                 result.remove(gpu_id)
@@ -128,9 +127,9 @@ def get_available_gpus(gpu_num):
         return str(results[0])
 
     str_gpus = ''
-    for i in xrange(gpu_num-1):
+    for i in xrange(gpu_num):
         str_gpus += str(results[i]) + ','
-    str_gpus += results[gpu_num-1]
+    str_gpus = str_gpus[:-1]
 
     return str_gpus
 
@@ -139,11 +138,12 @@ def model_id():
     FLAGS_dict = FLAGS.__dict__
     model_id = str(FLAGS_dict['network']) + '-' + str(FLAGS_dict['train_image_size'])
     model_id += '-' + str(FLAGS_dict['subsets_for_training'])
-    model_id += '-' + 'L2-SP' if FLAGS_dict['weight_decay_mode'] == 1 else 'L2'
+    model_id += '-L2-SP' if FLAGS_dict['weight_decay_mode'] == 1 else '-L2'
     model_id += '-' + 'wd_alpha' + str(FLAGS_dict['weight_decay_rate'])
     model_id += '-' + 'wd_beta' + str(FLAGS_dict['weight_decay_rate2'])
+    model_id += '-' + 'batch_size' + str(FLAGS_dict['batch_size']*FLAGS_dict['gpu_num'])
 
-    model_arguments = ['batch_size', 'lrn_rate', 'consider_dilated', 'random_rotate', 'random_scale']
+    model_arguments = ['lrn_rate', 'consider_dilated', 'random_rotate', 'random_scale']
     for arg in model_arguments:
         model_id += '-' + arg + str(FLAGS_dict[arg])
 
