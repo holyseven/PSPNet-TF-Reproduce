@@ -110,7 +110,7 @@ def global_avg_pool(list_input, data_format):
     return list_output
 
 
-def conv2d_same(list_input, out_channels, kernel_size, stride, trainable,
+def conv2d_same(list_input, out_channels, kernel_size, stride, trainable=True,
                 rate=1, data_format='NHWC', initializer='he', scope=None, float_type=tf.float32,
                 he_init_std=None):
     # ======================== Checking valid values =========================
@@ -189,12 +189,12 @@ def conv2d_same(list_input, out_channels, kernel_size, stride, trainable,
     return list_output
 
 
-def batch_norm(name, list_input, trainable, data_format, mode,
-               use_gamma=True, use_beta=True, bn_epsilon=1e-5, bn_ema=0.9, float_type=tf.float32):
+def batch_norm(list_input, stats_mode, data_format='NHWC', float_type=tf.float32, trainable=True,
+               use_gamma=True, use_beta=True, bn_epsilon=1e-5, bn_ema=0.9, scope='BatchNorm'):
 
     def get_bn_variables(n_out, use_scale, use_bias, trainable, float_type):
         # TODO: not sure what to do.
-        float_type = tf.float32
+        # float_type = tf.float32
 
         if use_bias:
             beta = tf.get_variable('beta', [n_out],
@@ -236,8 +236,6 @@ def batch_norm(name, list_input, trainable, data_format, mode,
             "Only two data formats are supported at this moment: 'NHWC' or 'NCHW', "
             "%s is an unknown data format." % data_format)
     assert type(list_input) == list
-    if mode not in ['train', 'training', 'val', 'validation', 'test', 'eval']:
-        raise TypeError("Unknown mode.")
 
     # ======================== Setting default values =========================
     shape = list_input[0].get_shape().as_list()
@@ -245,10 +243,6 @@ def batch_norm(name, list_input, trainable, data_format, mode,
     n_out = shape[-1]
     if data_format == 'NCHW':
         n_out = shape[1]
-    if mode is 'training' or mode is 'train':
-        mode = 'train'
-    else:
-        mode = 'test'
 
     # ======================== Main operations =============================
     means = []
@@ -267,22 +261,20 @@ def batch_norm(name, list_input, trainable, data_format, mode,
         var = tf.reduce_mean(square_means, axis=0) - tf.square(mean)
         var *= tf.cast(num, float_type) / tf.cast(num-1, float_type)  # unbiased variance
 
-        # print 'mean shape changing from ', means[0].get_shape(), len(means), 'to ', mean.get_shape()
-        # print 'var shape changing from ', square_means[0].get_shape(), 'to ', var.get_shape()
-
     list_output = []
     for i in range(len(list_input)):
         with tf.device('/gpu:%d' % i):
-            with tf.variable_scope(name, reuse=i > 0):
+            with tf.variable_scope(scope, reuse=i > 0):
                 beta, gamma, moving_mean, moving_var = get_bn_variables(n_out, use_gamma, use_beta,
                                                                         trainable, float_type)
 
-                if mode == 'train' and trainable:
+                if 'train' in stats_mode:
                     xn = tf.nn.batch_normalization(
                         list_input[i], mean, var, beta, gamma, bn_epsilon)
-                    if tf.get_variable_scope().reuse:
+                    if tf.get_variable_scope().reuse or 'gather' not in stats_mode:
                         list_output.append(xn)
                     else:
+                        # gather stats and it is the main gpu device.
                         xn = update_bn_ema(xn, mean, var, moving_mean, moving_var, bn_ema)
                         list_output.append(xn)
                 else:
@@ -303,10 +295,9 @@ def relu(list_input):
     return list_output
 
 
-def bottleneck_residual(list_input, out_channels, stride, data_format,
-                        initializer='he', rate=1, trainable=True,
-                        bn_mode='train', bn_use_gamma=True, bn_use_beta=True, bn_epsilon=1e-5, bn_ema=0.9,
-                        float_type=tf.float32):
+def bottleneck_residual(list_input, out_channels, stride,
+                        initializer='he', rate=1, trainable=True, float_type=tf.float32, data_format='NHWC',
+                        bn_mode='train_gather', bn_use_gamma=True, bn_use_beta=True, bn_epsilon=1e-5, bn_ema=0.9):
     """Bottleneck v1 residual unit with 3 sub layers."""
 
     # ======================== Checking valid values =========================
@@ -333,26 +324,26 @@ def bottleneck_residual(list_input, out_channels, stride, data_format,
     orig_x = list_input
     with tf.variable_scope('bottleneck_v1/conv1'):
         """1x1, 64->64"""
-        x = conv2d_same(list_input, out_channels / 4, 1, 1,
+        x = conv2d_same(list_input, out_channels // 4, 1, 1,
                         trainable=trainable, data_format=data_format, initializer=initializer, float_type=float_type)
-        x = batch_norm('BatchNorm', x, trainable, data_format, bn_mode, bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema,
-                       float_type)
+        x = batch_norm(x, bn_mode, data_format, float_type, trainable,
+                       bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema)
         x = relu(x)
 
     with tf.variable_scope('bottleneck_v1/conv2'):
         """3x3, 64->64"""
-        x = conv2d_same(x, out_channels / 4, 3, stride, trainable, rate, data_format, initializer,
+        x = conv2d_same(x, out_channels // 4, 3, stride, trainable, rate, data_format, initializer,
                         float_type=float_type)
-        x = batch_norm('BatchNorm', x, trainable, data_format, bn_mode, bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema,
-                       float_type)
+        x = batch_norm(x, bn_mode, data_format, float_type, trainable,
+                       bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema)
         x = relu(x)
 
     with tf.variable_scope('bottleneck_v1/conv3'):
         """1x1, 64->256"""
         x = conv2d_same(x, out_channels, 1, 1,
                         trainable=trainable, data_format=data_format, initializer=initializer, float_type=float_type)
-        x = batch_norm('BatchNorm', x, trainable, data_format, bn_mode, bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema,
-                       float_type)
+        x = batch_norm(x, bn_mode, data_format, float_type, trainable,
+                       bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema)
 
     """1x1, 64->256 or 256==256, do nothing."""
     if in_channels != out_channels:
@@ -360,8 +351,8 @@ def bottleneck_residual(list_input, out_channels, stride, data_format,
             orig_x = conv2d_same(orig_x, out_channels, 1, stride,
                                  trainable=trainable, data_format=data_format,
                                  initializer=initializer, float_type=float_type)
-            orig_x = batch_norm('BatchNorm', orig_x, trainable, data_format,
-                                bn_mode, bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema, float_type)
+            orig_x = batch_norm(orig_x, bn_mode, data_format, float_type, trainable,
+                                bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema)
     else:
         if stride > 1:
             orig_x = max_pool(orig_x, 1, 2, data_format)
@@ -406,8 +397,8 @@ def bottleneck_residual_v2(list_input, out_channels, stride, data_format,
 
     # ======================== Main operations =============================
     with tf.variable_scope('bottleneck_v2'):
-        preact = batch_norm('preact', list_input, trainable, data_format,
-                            bn_mode, bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema, float_type)
+        preact = batch_norm(list_input, bn_mode, data_format, float_type, trainable,
+                            bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema, scope='preact')
         preact = relu(preact)
 
         with tf.variable_scope('shortcut'):
@@ -421,14 +412,14 @@ def bottleneck_residual_v2(list_input, out_channels, stride, data_format,
         with tf.variable_scope('conv1'):
             residual = conv2d_same(preact, out_channels / 4, 1, 1, trainable, 1, data_format, initializer,
                                    float_type=float_type)
-            residual = batch_norm('BatchNorm', residual, trainable, data_format, bn_mode, bn_use_gamma, bn_use_beta,
-                                  bn_epsilon, bn_ema, float_type)
+            residual = batch_norm(residual, bn_mode, data_format, float_type, trainable,
+                                  bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema)
             residual = relu(residual)
         with tf.variable_scope('conv2'):
             residual = conv2d_same(residual, out_channels / 4, 3, stride, trainable, rate, data_format, initializer,
                                    float_type=float_type)
-            residual = batch_norm('BatchNorm', residual, trainable, data_format, bn_mode, bn_use_gamma, bn_use_beta,
-                                  bn_epsilon, bn_ema, float_type)
+            residual = batch_norm(residual, bn_mode, data_format, float_type, trainable,
+                                  bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema)
             residual = relu(residual)
         with tf.variable_scope('conv3'):
             residual = conv_bias_relu(residual, out_channels, 1, 1, trainable, relu=False,

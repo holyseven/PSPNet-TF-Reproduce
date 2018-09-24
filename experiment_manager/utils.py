@@ -25,10 +25,10 @@ def sorted_str_dict(dict):
 
 
 class LogDir(object):
-    def __init__(self, database, log_dir, weight_decay_mode):
+    def __init__(self, database, log_dir):
         self.log_dir = './log'
         self.database_dir = os.path.join(self.log_dir, database)
-        self.exp_dir = os.path.join(self.database_dir, log_dir+'-'+str(weight_decay_mode))
+        self.exp_dir = os.path.join(self.database_dir, log_dir)
         self.snapshot_dir = os.path.join(self.exp_dir, 'snapshot')
 
     def print_all_info(self):

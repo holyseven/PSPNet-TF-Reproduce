@@ -4,93 +4,163 @@ try:
 except NameError:
     xrange = range
 
-import sys
-sys.path.append('../')
-
 import datetime
 import os
 
 import tensorflow as tf
-from experiment_manager.utils import LogDir, sorted_str_dict
 from model import pspnet_mg
 import math
 import numpy as np
 import cv2
 from database.helper_segmentation import *
 from database.reader_segmentation import SegmentationImageReader
+from experiment_manager.utils import LogDir, sorted_str_dict
 
 import argparse
 parser = argparse.ArgumentParser()
+parser.add_argument('--gpu_num', type=int, default=1, help='gpu num')
+
 parser.add_argument('--consider_dilated', type=int, default=0, help='consider dilated conv weights when using L2-SP.')
 parser.add_argument('--network', type=str, default='resnet_v1_50', help='resnet_v1_50 or 101')
-parser.add_argument('--server', type=int, default=0, help='local machine 0 or server 1 or 2')
-parser.add_argument('--epsilon', type=float, default=0.00001, help='epsilon in bn layers')
-parser.add_argument('--norm_only', type=int, default=0,
-                    help='no beta nor gamma in fused_bn (1). Or with beta and gamma(0).')
-parser.add_argument('--data_type', type=int, default=32, help='float32 or float16')
 parser.add_argument('--database', type=str, default='SBD', help='SBD, Cityscapes or ADE.')
-parser.add_argument('--resize_images_method', type=str, default='bilinear', help='resize images method: bilinear or nn')
-parser.add_argument('--color_switch', type=int, default=0, help='color switch or not')
-parser.add_argument('--eval_only', type=int, default=0, help='only do the evaluation (1) or do train and eval (0).')
-parser.add_argument('--log_dir', type=str, default='pspmg-0', help='according to gpu index and wd method')
+parser.add_argument('--subsets_for_training', type=str, default='train,val', help='whether use val set for training')
+parser.add_argument('--batch_size', type=int, default=1, help='batch size')
+parser.add_argument('--weight_decay_mode', type=int, default=1, help='weight decay mode')
+parser.add_argument('--weight_decay_rate', type=float, default=0.01, help='weight decay rate for existing layers')
+parser.add_argument('--weight_decay_rate2', type=float, default=0.01, help='weight decay rate for new layers')
+parser.add_argument('--train_image_size', type=int, default=480, help='spatial size of inputs')
 
-parser.add_argument('--train_conv2dt', type=int, default=0, help='train conv2dt instead of using resize images.')
+# will rarely change
+parser.add_argument('--lrn_rate', type=float, default=0.01, help='initial learning rate')
+parser.add_argument('--random_rotate', type=int, default=1, help='random rotate')
+parser.add_argument('--random_scale', type=int, default=1, help='random scale')
+parser.add_argument('--train_max_iter', type=int, default=30000, help='Maximum training iteration')
+parser.add_argument('--snapshot', type=int, default=15000, help='snapshot every ')
+parser.add_argument('--scale_min', type=float, default=0.5, help='random scale rate min')
+parser.add_argument('--scale_max', type=float, default=2.0, help='random scale rate max')
+
+# nearly will never change
+parser.add_argument('--color_switch', type=int, default=0, help='color switch or not')
 parser.add_argument('--loss_type', type=str, default='normal', help='normal, focal_1, etc.')
 parser.add_argument('--structure_in_paper', type=int, default=0, help='first conv layers')
 parser.add_argument('--train_like_in_paper', type=int, default=0,
                     help='new layers receive 10 times learning rate; biases * 2')
+parser.add_argument('--bn_frozen', type=int, default=0, help='freezing the statistics in existing bn layers')
+parser.add_argument('--blur', type=int, default=1, help='random blur: brightness/saturation/constrast')
+parser.add_argument('--initializer', type=str, default='he', help='he or xavier')
+parser.add_argument('--optimizer', type=str, default='mom', help='mom, sgd, adam, more to be added')
+parser.add_argument('--momentum', type=float, default=0.9, help='momentum for mom optimizer')
+parser.add_argument('--float_type', type=int, default=32, help='float32 or float16')
+parser.add_argument('--data_format', type=str, default='NHWC', help='NHWC or NCHW.')
 parser.add_argument('--has_aux_loss', type=int, default=1, help='with(1) or without(0) auxiliary loss')
+parser.add_argument('--poly_lr', type=int, default=1, help='poly learning rate policy')
 parser.add_argument('--new_layer_names', type=str, default=None, help='with(1) or without(0) auxiliary loss')
 
-parser.add_argument('--subsets_for_training', type=str, default='train,val', help='whether use val set for training')
-parser.add_argument('--scale_min', type=float, default=0.5, help='random scale rate min')
-parser.add_argument('--scale_max', type=float, default=2.0, help='random scale rate max')
-parser.add_argument('--batch_size', type=int, default=1, help='batch size')
-parser.add_argument('--optimizer', type=str, default='mom', help='mom, sgd, adam, more to be added')
-parser.add_argument('--poly_lr', type=int, default=1, help='poly learning rate policy')
-parser.add_argument('--lrn_rate', type=float, default=0.01, help='initial learning rate')
-parser.add_argument('--weight_decay_mode', type=int, default=1, help='weight decay mode')
-parser.add_argument('--weight_decay_rate', type=float, default=0.01, help='weight decay rate for existing layers')
-parser.add_argument('--weight_decay_rate2', type=float, default=0.01, help='weight decay rate for new layers')
-parser.add_argument('--train_max_iter', type=int, default=9000, help='Maximum training iteration')
-parser.add_argument('--snapshot', type=int, default=3000, help='snapshot every ')
-parser.add_argument('--momentum', type=float, default=0.9, help='momentum for mom optimizer')
+# does not affect learning process
 parser.add_argument('--fine_tune_filename', type=str,
-                    default='../z_pretrained_weights/resnet_v1_50.ckpt',
+                    default='./z_pretrained_weights/resnet_v1_50.ckpt',
                     help='fine_tune_filename')
-parser.add_argument('--fisher_filename', type=str, default='./fisher_exp.npy', help='filename of fisher matrix')
 parser.add_argument('--resume_step', type=int, default=None, help='resume step')
 parser.add_argument('--lr_step', type=str, default=None, help='list of lr rate decreasing step. Default None.')
 parser.add_argument('--step_size', type=float, default=0.1,
                     help='Each lr_step, learning rate decreases . Default to 0.1')
-parser.add_argument('--gpu_num', type=int, default=1, help='gpu num')
-parser.add_argument('--ema_decay', type=float, default=0.9, help='ema decay of moving average in bn layers')
-parser.add_argument('--blur', type=int, default=1, help='random blur: brightness/saturation/constrast')
-parser.add_argument('--random_rotate', type=int, default=1, help='random rotate')
-parser.add_argument('--random_scale', type=int, default=1, help='random scale')
-parser.add_argument('--initializer', type=str, default='xavier', help='he or xavier')
-parser.add_argument('--fix_blocks', type=int, default=0,
-                    help='number of blocks whose weights will be fixed when training')
 parser.add_argument('--save_first_iteration', type=int, default=0, help='whether saving the initial model')
-parser.add_argument('--fisher_epsilon', type=float, default=0, help='clip value for fisher regularization')
-parser.add_argument('--train_image_size', type=int, default=864, help='spatial size of inputs')
-parser.add_argument('--bn_frozen', type=int, default=0, help='freezing the statistics in existing bn layers')
 
+# test or evaluation
+parser.add_argument('--eval_only', type=int, default=0, help='only do the evaluation (1) or do train and eval (0).')
 parser.add_argument('--test_max_iter', type=int, default=None, help='maximum test iteration')
-parser.add_argument('--test_batch_size', type=int, default=1, help='batch size used for test or validation')
 parser.add_argument('--test_image_size', type=int, default=864,
                     help='spatial size of inputs for test. not used any longer')
 parser.add_argument('--mirror', type=int, default=1, help='whether adding the results from mirroring.')
 FLAGS = parser.parse_args()
 
 
+def get_available_gpus(gpu_num):
+    # reference: https://stackoverflow.com/a/41638727/4834515
+    import subprocess, re
+
+    def run_command(cmd):
+        """Run command, return output as string."""
+        output = subprocess.Popen(cmd, stdout=subprocess.PIPE, shell=True).communicate()[0]
+        return output.decode("ascii")
+
+    def list_available_gpus():
+        """Returns list of available GPU ids."""
+        output = run_command("nvidia-smi -L")
+        # lines of the form GPU 0: TITAN X
+        gpu_regex = re.compile(r"GPU (?P<gpu_id>\d+):")
+        result = []
+        for line in output.strip().split("\n"):
+            m = gpu_regex.match(line)
+            assert m, "Couldnt parse " + line
+            result.append(int(m.group("gpu_id")))
+        return result
+
+    def gpu_memory_map():
+        """Returns map of GPU id to memory allocated on that GPU."""
+
+        output = run_command("nvidia-smi")
+        gpu_output = output[output.find("GPU Memory"):]
+        # lines of the form
+        # |    0      8734    C   python                                       11705MiB |
+        memory_regex = re.compile(r"[|]\s+?(?P<gpu_id>\d+)\D+?(?P<pid>\d+).+[ ](?P<gpu_memory>\d+)MiB")
+        rows = gpu_output.split("\n")
+        result = range(len(list_available_gpus()))
+        for row in rows:
+            m = memory_regex.search(row)
+            if not m:
+                continue
+            gpu_id = int(m.group("gpu_id"))
+            gpu_memory = int(m.group("gpu_memory"))
+            if gpu_memory < 1000:
+                continue
+            else:
+                result.remove(gpu_id)
+
+        return result
+
+    if gpu_num <= 0:
+        raise ValueError('GPU number <= 0.')
+    results = gpu_memory_map()
+    if len(results) < gpu_num:
+        raise ValueError('No enough GPUs.')
+    if len(results) == 1:
+        return str(results[0])
+
+    str_gpus = ''
+    for i in xrange(gpu_num-1):
+        str_gpus += str(results[i]) + ','
+    str_gpus += results[gpu_num-1]
+
+    return str_gpus
+
+
+def model_id():
+    FLAGS_dict = FLAGS.__dict__
+    model_id = str(FLAGS_dict['network']) + '-' + str(FLAGS_dict['train_image_size'])
+    model_id += '-' + str(FLAGS_dict['subsets_for_training'])
+    model_id += '-' + 'L2-SP' if FLAGS_dict['weight_decay_mode'] == 1 else 'L2'
+    model_id += '-' + 'wd_alpha' + str(FLAGS_dict['weight_decay_rate'])
+    model_id += '-' + 'wd_beta' + str(FLAGS_dict['weight_decay_rate2'])
+
+    model_arguments = ['batch_size', 'lrn_rate', 'consider_dilated', 'random_rotate', 'random_scale']
+    for arg in model_arguments:
+        model_id += '-' + arg + str(FLAGS_dict[arg])
+
+    return model_id
+
+
 def train(resume_step=None):
-    if FLAGS.data_type == 16:
+    # < preparing arguments >
+    if FLAGS.float_type == 16:
         print('\n< using tf.float16 >\n')
-        data_type = tf.float16
+        float_type = tf.float16
     else:
         print('\n< using tf.float32 >\n')
-        data_type = tf.float32
+        float_type = tf.float32
+    new_layer_names = FLAGS.new_layer_names
+    if FLAGS.new_layer_names is not None:
+        new_layer_names = new_layer_names.split(',')
 
     # < data set >
     data_list = FLAGS.subsets_for_training.split(',')
@@ -98,7 +168,6 @@ def train(resume_step=None):
         data_list = ['train']
     list_images = []
     list_labels = []
-
     with tf.device('/cpu:0'):
         reader = SegmentationImageReader(
             FLAGS.database,
@@ -115,63 +184,25 @@ def train(resume_step=None):
             list_images.append(image_batch)
             list_labels.append(label_batch)
 
-    wd_rate_ph = tf.placeholder(data_type, shape=())
-    wd_rate2_ph = tf.placeholder(data_type, shape=())
-    lrn_rate_ph = tf.placeholder(data_type, shape=())
+    # < network >
+    model = pspnet_mg.PSPNetMG(reader.num_classes,
+                               mode='train', resnet=FLAGS.network, bn_mode='frozen' if FLAGS.bn_frozen else 'gather',
+                               data_format=FLAGS.data_format,
+                               initializer=FLAGS.initializer,
+                               fine_tune_filename=FLAGS.fine_tune_filename,
+                               wd_mode=FLAGS.weight_decay_mode,
+                               gpu_num=FLAGS.gpu_num,
+                               float_type=float_type,
+                               has_aux_loss=FLAGS.has_aux_loss,
+                               train_like_in_paper=FLAGS.train_like_in_paper,
+                               structure_in_paper=FLAGS.structure_in_paper,
+                               new_layer_names=new_layer_names,
+                               loss_type=FLAGS.loss_type,
+                               consider_dilated=FLAGS.consider_dilated)
+    train_ops = model.build_train_ops(list_images, list_labels)
 
-    new_layer_names = FLAGS.new_layer_names
-    if FLAGS.new_layer_names is not None:
-        new_layer_names = new_layer_names.split(',')
-
-    resnet = FLAGS.network
-    PSPModel = pspnet_mg.PSPNetMG
-
-    with tf.variable_scope(resnet):
-        model = PSPModel(reader.num_classes, lrn_rate_ph, wd_rate_ph, wd_rate2_ph,
-                         mode='train', bn_epsilon=FLAGS.epsilon, resnet=resnet,
-                         norm_only=FLAGS.norm_only,
-                         initializer=FLAGS.initializer,
-                         fix_blocks=FLAGS.fix_blocks,
-                         fine_tune_filename=FLAGS.fine_tune_filename,
-                         bn_ema=FLAGS.ema_decay,
-                         bn_frozen=FLAGS.bn_frozen,
-                         wd_mode=FLAGS.weight_decay_mode,
-                         fisher_filename=FLAGS.fisher_filename,
-                         gpu_num=FLAGS.gpu_num,
-                         float_type=data_type,
-                         fisher_epsilon=FLAGS.fisher_epsilon,
-                         has_aux_loss=FLAGS.has_aux_loss,
-                         train_like_in_paper=FLAGS.train_like_in_paper,
-                         structure_in_paper=FLAGS.structure_in_paper,
-                         new_layer_names=new_layer_names,
-                         loss_type=FLAGS.loss_type,
-                         train_conv2dt=FLAGS.train_conv2dt,
-                         resize_images_method=FLAGS.resize_images_method,
-                         consider_dilated=FLAGS.consider_dilated)
-        model.inference(list_images)
-        model.build_train_op(list_labels)
-
-    names = []
-    num_params = 0
-    for v in tf.trainable_variables():
-        # print v.name
-        names.append(v.name)
-        num = 1
-        for i in v.get_shape().as_list():
-            num *= i
-        num_params += num
-    print("Trainable parameters' num: %d" % num_params)
-
-    print('iou precision shape: ', model.predictions.get_shape(), list_labels[0].get_shape())
-    pred = tf.reshape(model.predictions, [-1, ])
-    gt = tf.reshape(list_labels[0], [-1, ])
-    indices = tf.squeeze(tf.where(tf.less_equal(gt, reader.num_classes - 1)), 1)
-    gt = tf.cast(tf.gather(gt, indices), tf.int32)
-    pred = tf.gather(pred, indices)
-    precision_op, update_op = tf.contrib.metrics.streaming_mean_iou(pred, gt, num_classes=reader.num_classes)
-    # ========================= end of building model ================================
-
-    logdir = LogDir(FLAGS.database, FLAGS.log_dir, FLAGS.weight_decay_mode)
+    # < log dir and model id >
+    logdir = LogDir(FLAGS.database, model_id())
     logdir.print_all_info()
     if not os.path.exists(logdir.log_dir):
         print('creating ', logdir.log_dir, '...')
@@ -186,16 +217,15 @@ def train(resume_step=None):
         print('creating ', logdir.snapshot_dir, '...')
         os.mkdir(logdir.snapshot_dir)
 
-    init = [tf.global_variables_initializer(), tf.local_variables_initializer()]
-
     gpu_options = tf.GPUOptions(allow_growth=False)
     config = tf.ConfigProto(log_device_placement=False, gpu_options=gpu_options, allow_soft_placement=True)
     sess = tf.Session(config=config)
-    sess.run(init)
-
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+    init = [tf.global_variables_initializer(), tf.local_variables_initializer()]
+    sess.run(init)
 
+    # < convert npy to .ckpt >
     step = 0
     if '.npy' in FLAGS.fine_tune_filename:
         # This can transform .npy weights with variables names being the same to the tf ckpt model.
@@ -215,11 +245,10 @@ def train(resume_step=None):
 
         saver = tf.train.Saver(var_list=fine_tune_variables)
         saver.save(sess, logdir.snapshot_dir + '/model.ckpt', global_step=0)
-
         return
 
+    # < load pre-trained model>
     import_variables = tf.trainable_variables()
-
     if FLAGS.fine_tune_filename is not None and resume_step is None:
         fine_tune_variables = []
         new_layers_names = model.new_layers_names
@@ -263,16 +292,6 @@ def train(resume_step=None):
         for t in temps:
             lr_step.append(int(t))
 
-    # fine_tune_variables = []
-    # for v in tf.global_variables():
-    #     if 'Momentum' in v.name:
-    #         continue
-    #     print '=====Saving initial snapshot process: saving %s' % v.name
-    #     fine_tune_variables.append(v)
-    #
-    # saver = tf.train.Saver(var_list=fine_tune_variables)
-    # saver.save(sess, logdir.snapshot_dir + '/model.ckpt', global_step=0)
-
     saver = tf.train.Saver(max_to_keep=2)
     t0 = None
     wd_rate = FLAGS.weight_decay_rate
@@ -291,13 +310,13 @@ def train(resume_step=None):
             lrn_rate *= FLAGS.step_size
             lr_step.remove(step)
 
-        _, loss, wd, update, precision = sess.run([
-            model.train_op, model.loss, model.wd, update_op, precision_op
+        _, loss, wd, precision = sess.run([
+            train_ops, model.loss, model.wd, model.precision_op
         ],
             feed_dict={
-                lrn_rate_ph: lrn_rate,
-                wd_rate_ph: wd_rate,
-                wd_rate2_ph: wd_rate2
+                model.lrn_rate_ph: lrn_rate,
+                model.wd_rate_ph: wd_rate,
+                model.wd_rate2_ph: wd_rate2
             }
         )
 
@@ -321,11 +340,7 @@ def train(resume_step=None):
                 left_hours = left_time/3600.0
 
             t0 = datetime.datetime.now()
-
             average_loss /= show_period
-
-            if step == 0:
-                average_loss *= show_period
 
             f_log.write('%d,%f,%f,%f\n' % (step, average_loss, precision, wd))
             f_log.flush()
@@ -347,21 +362,14 @@ def eval(i_ckpt):
     # does not perform multi-scale test. ms-test is in predict.py
     tf.reset_default_graph()
 
-    if FLAGS.data_type == 16:
+    if FLAGS.float_type == 16:
         print('\n< using tf.float16 >\n')
-        data_type = tf.float16
+        float_type = tf.float16
     else:
         print('\n< using tf.float32 >\n')
-        data_type = tf.float32
+        float_type = tf.float32
 
-    if 'pspnet' in FLAGS.network:
-        input_size = FLAGS.test_image_size
-        print('< because using pspnet, the inputs have a fixed size and should be divided by 48:', input_size)
-        assert FLAGS.test_image_size % 48 == 0
-    else:
-        input_size = None
-        return
-
+    input_size = FLAGS.test_image_size
     with tf.device('/cpu:0'):
         reader = SegmentationImageReader(
             FLAGS.database,
@@ -376,21 +384,14 @@ def eval(i_ckpt):
     images_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 3])]
     labels_pl = [tf.placeholder(tf.int32, [None, input_size, input_size, 1])]
 
-    resnet = FLAGS.network
-    PSPModel = pspnet_mg.PSPNetMG
-
-    with tf.variable_scope(resnet):
-        model = PSPModel(reader.num_classes, None, None, None,
-                         mode='val', bn_epsilon=FLAGS.epsilon, resnet=resnet,
-                         norm_only=FLAGS.norm_only,
-                         float_type=data_type,
-                         has_aux_loss=False,
-                         structure_in_paper=FLAGS.structure_in_paper,
-                         resize_images_method=FLAGS.resize_images_method,
-                         train_conv2dt=FLAGS.train_conv2dt
-                         )
-        logits = model.inference(images_pl)
-        model.compute_loss(labels_pl, logits)
+    model = pspnet_mg.PSPNetMG(reader.num_classes,
+                               mode='val', resnet=FLAGS.network,
+                               data_format=FLAGS.data_format,
+                               float_type=float_type,
+                               has_aux_loss=False,
+                               structure_in_paper=FLAGS.structure_in_paper)
+    logits = model.inference(images_pl)
+    probas_op = tf.nn.softmax(logits, dim=1 if FLAGS.data_format == 'NCHW' else 3)
     # ========================= end of building model ================================
 
     gpu_options = tf.GPUOptions(allow_growth=False)
@@ -428,7 +429,7 @@ def eval(i_ckpt):
         imgsplitter = ImageSplitter(image, 1.0, FLAGS.color_switch, input_size, img_mean)
         feed_dict = {images_pl[0]: imgsplitter.get_split_crops()}
         [logits] = sess.run([
-            model.probabilities
+            probas_op
         ],
             feed_dict=feed_dict
         )
@@ -438,7 +439,7 @@ def eval(i_ckpt):
             imgsplitter_mirror = ImageSplitter(image_mirror, 1.0, FLAGS.color_switch, input_size, img_mean)
             feed_dict = {images_pl[0]: imgsplitter_mirror.get_split_crops()}
             [logits_m] = sess.run([
-                model.probabilities
+                probas_op
             ],
                 feed_dict=feed_dict
             )
@@ -462,6 +463,11 @@ def eval(i_ckpt):
 
 
 def main(_):
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    gpu = str(get_available_gpus(FLAGS.gpu_num))
+    print(gpu)
+    os.environ["CUDA_VISIBLE_DEVICES"] = gpu
+
     # ============================================================================
     # ============================= TRAIN ========================================
     # ============================================================================
@@ -472,7 +478,7 @@ def main(_):
     assert FLAGS.gpu_num is not None, 'should specify the number of gpu.'
     assert FLAGS.gpu_num > 0, 'the number of gpu should be bigger than 0.'
     if FLAGS.eval_only:
-        logdir = LogDir(FLAGS.database, FLAGS.log_dir, FLAGS.weight_decay_mode)
+        logdir = LogDir(FLAGS.database, model_id())
         logdir.print_all_info()
         f_log = open(logdir.exp_dir + '/' + str(datetime.datetime.now()) + '.txt', 'w')
         f_log.write('step,loss,precision,wd\n')

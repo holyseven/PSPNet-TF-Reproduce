@@ -293,15 +293,15 @@ def find_data_path(dataset):
     if dataset == 'Cityscapes':
         img_mean = np.array((72.41519599, 82.93553322, 73.18188461), dtype=np.float32)  # RGB, Cityscapes.
         num_classes = 19
-        data_dir = '../database/cityscapes'
+        data_dir = './database/cityscapes'
     elif dataset == 'SBD':
         img_mean = np.array((122.67891434, 116.66876762, 104.00698793), dtype=np.float32)  # RGB, SBD/Pascal VOC.
         num_classes = 21
-        data_dir = '../database/SBD_all'
+        data_dir = './database/SBD_all'
     elif 'ADE' in dataset:
         img_mean = np.array((122.67891434, 116.66876762, 104.00698793), dtype=np.float32)  # RGB, SBD/Pascal VOC.
         num_classes = 150
-        data_dir = '../database/ADEChallengeData2016'
+        data_dir = './database/ADEChallengeData2016'
     else:
         raise ValueError("Unknown database %s" % dataset)
 

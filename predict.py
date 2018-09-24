@@ -15,13 +15,9 @@ from experiment_manager.utils import sorted_str_dict
 
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--server', type=int, default=0, help='local machine 0 or server 1 or 2')
-parser.add_argument('--epsilon', type=float, default=0.00001, help='epsilon in bn layers')
-parser.add_argument('--norm_only', type=int, default=0,
-                    help='no beta nor gamma in fused_bn (1). Or with beta and gamma(0).')
-parser.add_argument('--data_type', type=int, default=32, help='float32 or float16')
+parser.add_argument('--float_type', type=int, default=32, help='float32 or float16')
+parser.add_argument('--data_format', type=str, default='NHWC', help='NHWC or NCHW.')
 parser.add_argument('--database', type=str, default='Cityscapes', help='Cityscapes or SBD.')
-parser.add_argument('--resize_images_method', type=str, default='bilinear', help='resize images method: bilinear or nn')
 parser.add_argument('--color_switch', type=int, default=0, help='color switch or not')
 parser.add_argument('--test_max_iter', type=int, default=None, help='maximum test iteration')
 parser.add_argument('--test_image_size', type=int, default=864,
@@ -29,9 +25,10 @@ parser.add_argument('--test_image_size', type=int, default=864,
 parser.add_argument('--mode', type=str, default='val', help='test or val')
 parser.add_argument('--structure_in_paper', type=int, default=0, help='structure in paper')
 
+parser.add_argument('--network', type=str, default='resnet_v1_101', help='resnet_v1_50 or 101')
 parser.add_argument('--weights_ckpt',
                     type=str,
-                    default='./save/1-extra-2/model.ckpt-50000',
+                    default='./run_pspmg/save/1-extra-2/model.ckpt-50000',
                     help='ckpt file for loading the trained weights')
 parser.add_argument('--coloring', type=int, default=0, help='coloring the prediction and ground truth.')
 parser.add_argument('--mirror', type=int, default=1, help='whether adding the results from mirroring.')
@@ -45,15 +42,14 @@ def predict(i_ckpt):
     tf.reset_default_graph()
 
     print '================',
-    if FLAGS.data_type == 16:
+    if FLAGS.float_type == 16:
         print 'using tf.float16 ====================='
-        data_type = tf.float16
+        float_type = tf.float16
     else:
         print 'using tf.float32 ====================='
-        data_type = tf.float32
+        float_type = tf.float32
 
     image_size = FLAGS.test_image_size
-    print '=====because using pspnet, the inputs have a fixed size and should be divided by 48:', image_size
     assert FLAGS.test_image_size % 48 == 0
 
     with tf.device('/cpu:0'):
@@ -68,18 +64,15 @@ def predict(i_ckpt):
             color_switch=FLAGS.color_switch)
 
     images_pl = [tf.placeholder(tf.float32, [None, image_size, image_size, 3])]
-    labels_pl = [tf.placeholder(tf.int32, [None, image_size, image_size, 1])]
 
-    with tf.variable_scope('resnet_v1_101'):
-        model = pspnet_mg.PSPNetMG(reader.num_classes, None, None, None,
-                                   mode='val', bn_epsilon=FLAGS.epsilon, resnet='resnet_v1_101',
-                                   norm_only=FLAGS.norm_only,
-                                   float_type=data_type,
-                                   has_aux_loss=False,
-                                   structure_in_paper=FLAGS.structure_in_paper,
-                                   resize_images_method=FLAGS.resize_images_method
-                                   )
-        l = model.inference(images_pl)
+    model = pspnet_mg.PSPNetMG(reader.num_classes,
+                               mode='val', resnet=FLAGS.network,
+                               data_format=FLAGS.data_format,
+                               float_type=float_type,
+                               has_aux_loss=False,
+                               structure_in_paper=FLAGS.structure_in_paper)
+    logits = model.inference(images_pl)
+    probas_op = tf.nn.softmax(logits, dim=1 if FLAGS.data_format == 'NCHW' else 3)
     # ========================= end of building model ================================
 
     gpu_options = tf.GPUOptions(allow_growth=False)
@@ -122,13 +115,12 @@ def predict(i_ckpt):
 
     images_filenames = reader.image_list
     labels_filenames = reader.label_list
+    img_mean = reader.img_mean
 
     if FLAGS.test_max_iter is None:
         max_iter = len(images_filenames)
     else:
         max_iter = FLAGS.test_max_iter
-
-    # IMG_MEAN = [123.680000305, 116.778999329, 103.939002991]  # RGB mean from official PSPNet
 
     step = 0
     while step < max_iter:
@@ -138,7 +130,7 @@ def predict(i_ckpt):
 
         total_logits = np.zeros((image_height, image_width, reader.num_classes), np.float32)
         for scale in scales:
-            imgsplitter = ImageSplitter(image, scale, FLAGS.color_switch, image_size, reader.img_mean)
+            imgsplitter = ImageSplitter(image, scale, FLAGS.color_switch, image_size, img_mean)
             crops = imgsplitter.get_split_crops()
 
             # This is a suboptimal solution. More batches each iter, more rapid.
@@ -149,14 +141,14 @@ def predict(i_ckpt):
 
                 feed_dict = {images_pl[0]: crops[0:half]}
                 [logits_0] = sess.run([
-                    model.probabilities
+                    probas_op
                 ],
                     feed_dict=feed_dict
                 )
 
                 feed_dict = {images_pl[0]: crops[half:]}
                 [logits_1] = sess.run([
-                    model.probabilities
+                    probas_op
                 ],
                     feed_dict=feed_dict
                 )
@@ -164,7 +156,7 @@ def predict(i_ckpt):
             else:
                 feed_dict = {images_pl[0]: imgsplitter.get_split_crops()}
                 [logits] = sess.run([
-                    model.probabilities
+                    probas_op
                 ],
                     feed_dict=feed_dict
                 )
@@ -172,21 +164,21 @@ def predict(i_ckpt):
 
             if FLAGS.mirror == 1:
                 image_mirror = image[:, ::-1]
-                imgsplitter_mirror = ImageSplitter(image_mirror, scale, FLAGS.color_switch, image_size, reader.img_mean)
+                imgsplitter_mirror = ImageSplitter(image_mirror, scale, FLAGS.color_switch, image_size, img_mean)
                 crops_m = imgsplitter_mirror.get_split_crops()
                 if crops_m.shape[0] > 10:
                     half = crops_m.shape[0] / 2
 
                     feed_dict = {images_pl[0]: crops_m[0:half]}
                     [logits_0] = sess.run([
-                        model.probabilities
+                        probas_op
                     ],
                         feed_dict=feed_dict
                     )
 
                     feed_dict = {images_pl[0]: crops_m[half:]}
                     [logits_1] = sess.run([
-                        model.probabilities
+                        probas_op
                     ],
                         feed_dict=feed_dict
                     )
@@ -194,7 +186,7 @@ def predict(i_ckpt):
                 else:
                     feed_dict = {images_pl[0]: imgsplitter_mirror.get_split_crops()}
                     [logits_m] = sess.run([
-                        model.probabilities
+                        probas_op
                     ],
                         feed_dict=feed_dict
                     )
