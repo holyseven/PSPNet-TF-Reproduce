@@ -1,3 +1,6 @@
+database/cityscapes/
+database/SBD_all/
+database/ADEChallengeData2016/
 analyse_and*
 z_pretrained_weights/
 run_classification/log/
@@ -5,6 +8,7 @@ run_segmentation/log/
 predict_psp/save/
 run_pspmg/log/
 run_segmentation/save/
+*.jpg
 *.png
 *.txt
 *.pyc

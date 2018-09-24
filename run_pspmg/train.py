@@ -1,3 +1,9 @@
+from __future__ import print_function, division, absolute_import
+try:
+    xrange
+except NameError:
+    xrange = range
+
 import sys
 sys.path.append('../')
 
@@ -22,7 +28,7 @@ parser.add_argument('--epsilon', type=float, default=0.00001, help='epsilon in b
 parser.add_argument('--norm_only', type=int, default=0,
                     help='no beta nor gamma in fused_bn (1). Or with beta and gamma(0).')
 parser.add_argument('--data_type', type=int, default=32, help='float32 or float16')
-parser.add_argument('--database', type=str, default='SBD', help='SBD or Cityscapes.')
+parser.add_argument('--database', type=str, default='SBD', help='SBD, Cityscapes or ADE.')
 parser.add_argument('--resize_images_method', type=str, default='bilinear', help='resize images method: bilinear or nn')
 parser.add_argument('--color_switch', type=int, default=0, help='color switch or not')
 parser.add_argument('--eval_only', type=int, default=0, help='only do the evaluation (1) or do train and eval (0).')
@@ -57,7 +63,7 @@ parser.add_argument('--resume_step', type=int, default=None, help='resume step')
 parser.add_argument('--lr_step', type=str, default=None, help='list of lr rate decreasing step. Default None.')
 parser.add_argument('--step_size', type=float, default=0.1,
                     help='Each lr_step, learning rate decreases . Default to 0.1')
-parser.add_argument('--gpu_num', type=int, default=4, help='gpu num')
+parser.add_argument('--gpu_num', type=int, default=1, help='gpu num')
 parser.add_argument('--ema_decay', type=float, default=0.9, help='ema decay of moving average in bn layers')
 parser.add_argument('--blur', type=int, default=1, help='random blur: brightness/saturation/constrast')
 parser.add_argument('--random_rotate', type=int, default=1, help='random rotate')
@@ -79,47 +85,35 @@ FLAGS = parser.parse_args()
 
 
 def train(resume_step=None):
-    global_step = tf.get_variable('global_step', [], dtype=tf.int64,
-                                  initializer=tf.constant_initializer(0), trainable=False)
-    image_size = FLAGS.train_image_size
-
-    print '================',
     if FLAGS.data_type == 16:
-        print 'using tf.float16 ====================='
+        print('\n< using tf.float16 >\n')
         data_type = tf.float16
-        print 'can not use float16 at this moment, because of tf.nn.bn, if using fused_bn, the learning will be nan',
-        print ', no idea what happened.'
     else:
-        print 'using tf.float32 ====================='
+        print('\n< using tf.float32 >\n')
         data_type = tf.float32
 
+    # < data set >
     data_list = FLAGS.subsets_for_training.split(',')
     if len(data_list) < 1:
         data_list = ['train']
-    print data_list
-
-    images = []
-    labels = []
+    list_images = []
+    list_labels = []
 
     with tf.device('/cpu:0'):
         reader = SegmentationImageReader(
-            FLAGS.server,
             FLAGS.database,
             data_list,
-            (image_size, image_size),
+            (FLAGS.train_image_size, FLAGS.train_image_size),
             FLAGS.random_scale,
             random_mirror=True,
             random_blur=True,
             random_rotate=FLAGS.random_rotate,
             color_switch=FLAGS.color_switch,
             scale_rate=(FLAGS.scale_min, FLAGS.scale_max))
-
-    print '================ Database Info ================'
-    for i in range(FLAGS.gpu_num):
-        with tf.device('/cpu:0'):
+        for _ in xrange(FLAGS.gpu_num):
             image_batch, label_batch = reader.dequeue(FLAGS.batch_size)
-            images.append(image_batch)
-            labels.append(label_batch)
+            list_images.append(image_batch)
+            list_labels.append(label_batch)
 
     wd_rate_ph = tf.placeholder(data_type, shape=())
     wd_rate2_ph = tf.placeholder(data_type, shape=())
@@ -154,8 +148,8 @@ def train(resume_step=None):
                          train_conv2dt=FLAGS.train_conv2dt,
                          resize_images_method=FLAGS.resize_images_method,
                          consider_dilated=FLAGS.consider_dilated)
-        model.inference(images)
-        model.build_train_op(labels)
+        model.inference(list_images)
+        model.build_train_op(list_labels)
 
     names = []
     num_params = 0
@@ -166,31 +160,30 @@ def train(resume_step=None):
         for i in v.get_shape().as_list():
             num *= i
         num_params += num
-    print "Trainable parameters' num: %d" % num_params
+    print("Trainable parameters' num: %d" % num_params)
 
-    print 'iou precision shape: ', model.predictions.get_shape(), labels[0].get_shape()
+    print('iou precision shape: ', model.predictions.get_shape(), list_labels[0].get_shape())
     pred = tf.reshape(model.predictions, [-1, ])
-    gt = tf.reshape(labels[0], [-1, ])
+    gt = tf.reshape(list_labels[0], [-1, ])
     indices = tf.squeeze(tf.where(tf.less_equal(gt, reader.num_classes - 1)), 1)
     gt = tf.cast(tf.gather(gt, indices), tf.int32)
     pred = tf.gather(pred, indices)
     precision_op, update_op = tf.contrib.metrics.streaming_mean_iou(pred, gt, num_classes=reader.num_classes)
     # ========================= end of building model ================================
 
-    step = 0
     logdir = LogDir(FLAGS.database, FLAGS.log_dir, FLAGS.weight_decay_mode)
     logdir.print_all_info()
     if not os.path.exists(logdir.log_dir):
-        print 'creating ', logdir.log_dir, '...'
+        print('creating ', logdir.log_dir, '...')
         os.mkdir(logdir.log_dir)
     if not os.path.exists(logdir.database_dir):
-        print 'creating ', logdir.database_dir, '...'
+        print('creating ', logdir.database_dir, '...')
         os.mkdir(logdir.database_dir)
     if not os.path.exists(logdir.exp_dir):
-        print 'creating ', logdir.exp_dir, '...'
+        print('creating ', logdir.exp_dir, '...')
         os.mkdir(logdir.exp_dir)
     if not os.path.exists(logdir.snapshot_dir):
-        print 'creating ', logdir.snapshot_dir, '...'
+        print('creating ', logdir.snapshot_dir, '...')
         os.mkdir(logdir.snapshot_dir)
 
     init = [tf.global_variables_initializer(), tf.local_variables_initializer()]
@@ -203,24 +196,21 @@ def train(resume_step=None):
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
+    step = 0
     if '.npy' in FLAGS.fine_tune_filename:
         # This can transform .npy weights with variables names being the same to the tf ckpt model.
         fine_tune_variables = []
         npy_dict = np.load(FLAGS.fine_tune_filename).item()
         new_layers_names = ['Momentum']
         for v in tf.global_variables():
-            print '=====Saving initial snapshot process:',
             if any(elem in v.name for elem in new_layers_names):
-                print 'not import', v.name
                 continue
 
             name = v.name.split(':0')[0]
             if name not in npy_dict:
-                print 'not find', v.name
                 continue
 
             v.load(npy_dict[name], sess)
-            print 'saving', v.name
             fine_tune_variables.append(v)
 
         saver = tf.train.Saver(var_list=fine_tune_variables)
@@ -229,8 +219,6 @@ def train(resume_step=None):
         return
 
     import_variables = tf.trainable_variables()
-    if FLAGS.fix_blocks > 0 or FLAGS.bn_frozen > 0:
-        import_variables = tf.global_variables()
 
     if FLAGS.fine_tune_filename is not None and resume_step is None:
         fine_tune_variables = []
@@ -239,13 +227,13 @@ def train(resume_step=None):
         new_layers_names.append('up_sample')
         for v in import_variables:
             if any(elem in v.name for elem in new_layers_names):
-                print '=====Finetuning Process: not import %s' % v.name
+                print('< Finetuning Process: not import %s >' % v.name)
                 continue
             fine_tune_variables.append(v)
 
         loader = tf.train.Saver(var_list=fine_tune_variables, allow_empty=True)
         loader.restore(sess, FLAGS.fine_tune_filename)
-        print('=====Succesfully loaded fine-tune model from %s.' % FLAGS.fine_tune_filename)
+        print('< Succesfully loaded fine-tune model from %s. >' % FLAGS.fine_tune_filename)
     elif resume_step is not None:
         # ./snapshot/model.ckpt-3000
         i_ckpt = logdir.snapshot_dir + '/model.ckpt-%d' % resume_step
@@ -254,15 +242,15 @@ def train(resume_step=None):
         loader.restore(sess, i_ckpt)
 
         step = resume_step
-        print('=====Succesfully loaded model from %s at step=%s.' % (i_ckpt, resume_step))
+        print('< Succesfully loaded model from %s at step=%s. >' % (i_ckpt, resume_step))
     else:
-        print '=====Not import any model.'
+        print('< Not import any model. >')
 
-    print '=========================== training process begins ================================='
     f_log = open(logdir.exp_dir + '/' + str(datetime.datetime.now()) + '.txt', 'w')
     f_log.write('step,loss,precision,wd\n')
     f_log.write(sorted_str_dict(FLAGS.__dict__) + '\n')
 
+    print('\n< training process begins >\n')
     average_loss = 0.0
     show_period = 20
     snapshot = FLAGS.snapshot
@@ -314,7 +302,7 @@ def train(resume_step=None):
         )
 
         if math.isnan(loss) or math.isnan(wd):
-            print 'loss or weight norm is nan. Training Stopped!'
+            print('\nloss or weight norm is nan. Training Stopped!\n')
             has_nan = True
             break
 
@@ -342,10 +330,10 @@ def train(resume_step=None):
             f_log.write('%d,%f,%f,%f\n' % (step, average_loss, precision, wd))
             f_log.flush()
 
-            print '%s %s] Step %s, lr = %f, wd_rate = %f, wd_rate_2 = %f ' \
-                  % (str(datetime.datetime.now()), str(os.getpid()), step, lrn_rate, wd_rate, wd_rate2)
-            print '\t loss = %.4f, precision = %.4f, wd = %.4f' % (average_loss, precision, wd)
-            print '\t estimated time left: %.1f hours. %d/%d' % (left_hours, step, max_iter)
+            print('%s %s] Step %s, lr = %f, wd_rate = %f, wd_rate_2 = %f ' \
+                  % (str(datetime.datetime.now()), str(os.getpid()), step, lrn_rate, wd_rate, wd_rate2))
+            print('\t loss = %.4f, precision = %.4f, wd = %.4f' % (average_loss, precision, wd))
+            print('\t estimated time left: %.1f hours. %d/%d' % (left_hours, step, max_iter))
 
             average_loss = 0.0
 
@@ -359,21 +347,23 @@ def eval(i_ckpt):
     # does not perform multi-scale test. ms-test is in predict.py
     tf.reset_default_graph()
 
-    print '================',
     if FLAGS.data_type == 16:
-        print 'using tf.float16 ====================='
+        print('\n< using tf.float16 >\n')
         data_type = tf.float16
     else:
-        print 'using tf.float32 ====================='
+        print('\n< using tf.float32 >\n')
         data_type = tf.float32
 
-    input_size = FLAGS.test_image_size
-    print '=====because using pspnet, the inputs have a fixed size and should be divided by 48:', input_size
-    assert FLAGS.test_image_size % 48 == 0
+    if 'pspnet' in FLAGS.network:
+        input_size = FLAGS.test_image_size
+        print('< because using pspnet, the inputs have a fixed size and should be divided by 48:', input_size)
+        assert FLAGS.test_image_size % 48 == 0
+    else:
+        input_size = None
+        return
 
     with tf.device('/cpu:0'):
         reader = SegmentationImageReader(
-            FLAGS.server,
             FLAGS.database,
             'val',
             (input_size, input_size),
@@ -386,7 +376,7 @@ def eval(i_ckpt):
     images_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 3])]
     labels_pl = [tf.placeholder(tf.int32, [None, input_size, input_size, 1])]
 
-    resnet = FLAGS.network 
+    resnet = FLAGS.network
     PSPModel = pspnet_mg.PSPNetMG
 
     with tf.variable_scope(resnet):
@@ -417,7 +407,7 @@ def eval(i_ckpt):
         eval_step = i_ckpt.split('-')[-1]
         print('Succesfully loaded model from %s at step=%s.' % (i_ckpt, eval_step))
 
-    print '======================= eval process begins ========================='
+    print('< eval process begins >')
     average_loss = 0.0
     confusion_matrix = np.zeros((reader.num_classes, reader.num_classes), dtype=np.int64)
 
@@ -459,10 +449,10 @@ def eval(i_ckpt):
         step += 1
         compute_confusion_matrix(label, prediction, confusion_matrix)
         if step % 20 == 0:
-            print '%s %s] %d / %d. iou updating' \
-                  % (str(datetime.datetime.now()), str(os.getpid()), step, max_iter)
+            print('%s %s] %d / %d. iou updating' \
+                  % (str(datetime.datetime.now()), str(os.getpid()), step, max_iter))
             compute_iou(confusion_matrix)
-            print 'imprecise loss', average_loss / step
+            print('imprecise loss', average_loss / step)
 
     precision = compute_iou(confusion_matrix)
     coord.request_stop()
@@ -477,7 +467,7 @@ def main(_):
     # ============================================================================
     print(sorted_str_dict(FLAGS.__dict__))
     if FLAGS.resume_step is not None:
-        print 'Ready to resume from step %d.' % FLAGS.resume_step
+        print('Ready to resume from step %d.' % FLAGS.resume_step)
 
     assert FLAGS.gpu_num is not None, 'should specify the number of gpu.'
     assert FLAGS.gpu_num > 0, 'the number of gpu should be bigger than 0.'
@@ -509,8 +499,8 @@ def main(_):
     i_ckpt = i_ckpts[-1].split('.index')[0]
     loss, precision = eval(i_ckpt)
     step = i_ckpt.split('-')[-1]
-    print '%s %s] Step %s Test' % (str(datetime.datetime.now()), str(os.getpid()), step)
-    print '\t loss = %.4f, precision = %.4f' % (loss, precision)
+    print('%s %s] Step %s Test' % (str(datetime.datetime.now()), str(os.getpid()), step))
+    print('\t loss = %.4f, precision = %.4f' % (loss, precision))
     f_log.write('TEST:%s,%f,%f\n' % (step, loss, precision))
     f_log.flush()
 

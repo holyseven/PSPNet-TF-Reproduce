@@ -3,6 +3,7 @@ mg means multiple gpus. The idea here is very simple: changing the inputs and ou
 to the number of gpus. All operations are defined under `with tf.device('/gpu:%d' % i):`.
 Except batch normalization, all functions have no difference from the implementation in a single gpu.
 """
+from __future__ import print_function, division, absolute_import
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.training import moving_averages
@@ -529,8 +530,6 @@ def conv2d_transpose(name, list_input, out_channels=None,
     weights = get_transpose_weights(weights_shape)
     with tf.variable_scope(name):
         init_conv2dt_weights = tf.constant(weights, dtype=tf.float32)
-        if trainable:
-            print 'training conv2d_transpose layer: ', tf.get_variable_scope().name
 
     tf.add_to_collection('init_conv2dt_weights', init_conv2dt_weights)
 

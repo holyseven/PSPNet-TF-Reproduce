@@ -1,3 +1,4 @@
+from __future__ import absolute_import, division, print_function
 import numpy as np
 import tensorflow as tf
 import math
@@ -7,10 +8,10 @@ IGNORE_LABEL = 255
 
 def image_scaling(img, label, scale_rate):
     if scale_rate is None:
-        print 'applying random scale [0.5, 2]...'
+        print('applying random scale [0.5, 2]...')
         scale = tf.random_uniform([1], minval=0.5, maxval=2.0, seed=None)
     else:
-        print 'applying random scale [%f, %f]...' % (scale_rate[0], scale_rate[1])
+        print('applying random scale [%f, %f]...' % (scale_rate[0], scale_rate[1]))
         scale = tf.random_uniform([1], minval=scale_rate[0], maxval=scale_rate[1], seed=None)
     h_new = tf.to_int32(tf.multiply(tf.cast(tf.shape(img)[0], tf.float32), scale))
     w_new = tf.to_int32(tf.multiply(tf.cast(tf.shape(img)[1], tf.float32), scale))
@@ -60,10 +61,10 @@ def random_crop_and_pad_image_and_labels(image, label, crop_h, crop_w, ignore_la
     combined = tf.concat([image, label], 2)
     image_shape = tf.shape(image)
     offset_height = tf.cond(tf.less(image_shape[0], crop_h),
-                            lambda: (crop_h - image_shape[0])/2,
+                            lambda: (crop_h - image_shape[0])//2,
                             lambda: tf.constant(0))
     offset_width = tf.cond(tf.less(image_shape[1], crop_w),
-                           lambda: (crop_w - image_shape[1])/2,
+                           lambda: (crop_w - image_shape[1])//2,
                            lambda: tf.constant(0))
     combined_pad = tf.image.pad_to_bounding_box(combined, offset_height=offset_height, offset_width=offset_width,
                                                 target_height=tf.maximum(crop_h, image_shape[0]),
@@ -81,77 +82,6 @@ def random_crop_and_pad_image_and_labels(image, label, crop_h, crop_w, ignore_la
     img_crop.set_shape((crop_h, crop_w, 3))
     label_crop.set_shape((crop_h, crop_w, 1))
     return img_crop, label_crop
-
-
-def _read_cityscapes_image_label_list(data_dir, data_sub):
-    if data_sub not in ['train', 'val', 'test', 'train_extra']:
-        print 'data sub should be train, val, test or train_extra'
-        return
-    import glob
-    images_filename_proto = data_dir + '/leftImg8bit/' + data_sub + '/*/*.png'
-    images = sorted(glob.glob(images_filename_proto))
-
-    labels_filename_proto = data_dir + '/gt/' + data_sub + '/*/*.png'
-    labels = sorted(glob.glob(labels_filename_proto))
-
-    assert len(images) == len(labels), 'images and labels have different numbers of examples. ' \
-                                       'Suggestion: add more constraint on the filename_proto, ' \
-                                       'or move undesired images to other directory.'
-    # TODO: verify if incorrectly read labels containing labelIds [0, 34].
-    # For now, see the prepation at
-    # https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/preparation/createTrainIdInstanceImgs.py
-
-    # for just checking they are corresponded.
-    for i in range(len(images)):
-        if images[i].split('leftImg8bit')[1] == labels[i].split('gt')[1]:
-            continue
-
-        print i, images[i], labels[i]
-
-    return images, labels
-
-
-def _read_sbd_image_label_list(data_dir, data_sub):
-    if data_sub not in ['train', 'val', 'test']:
-        print 'data sub should be train, val or test'
-        return
-    f = open(data_dir + '/' + data_sub + '.txt', 'r')
-    images = []
-    lables = []
-    for line in f:
-        try:
-            image, mask = line.strip("\n").split(' ')
-        except ValueError:  # Adhoc for test.
-            image = mask = line.strip("\n")
-        images.append(data_dir + image)
-        lables.append(data_dir + mask)
-    return images, lables
-
-
-def read_labeled_image_list(dataset, data_dir, data_sub):
-    """Reads txt file containing paths to images and ground truth masks.
-
-    Args:
-      data_dir: path to the directory with images and masks.
-      data_sub: path to the file with lines of the form '/path/to/image /path/to/mask'. 'train' or 'val'
-
-    Returns:
-      Two lists with all file names for images and masks, respectively.
-    """
-    path_read_func = _read_cityscapes_image_label_list  # Cityscapes.
-    if dataset == 'SBD':
-        path_read_func = _read_sbd_image_label_list  # SBD
-
-    if type(data_sub) is list:
-        # use more for training.
-        images, labels = [], []
-        for each_data_set in data_sub:
-            each_image_set, each_label_set = path_read_func(data_dir, each_data_set)
-            images += each_image_set
-            labels += each_label_set
-        return images, labels
-    else:
-        return path_read_func(data_dir, data_sub)
 
 
 def rotate_image_tensor(image, angle, mode='black'):
@@ -244,10 +174,14 @@ def rotate_image_tensor(image, angle, mode='black'):
 
 def generate_crops_for_training(input_queue, input_size, img_mean, random_scale, random_mirror, random_blur,
                                 random_rotate, color_switch, scale_rate):
+    assert input_size is not None
+    h, w = input_size
+
     img_contents = tf.read_file(input_queue[0])
     label_contents = tf.read_file(input_queue[1])
 
-    img = tf.image.decode_image(img_contents, channels=3)  # r,g,b
+    img = tf.image.decode_image(img_contents, channels=3)
+    img.set_shape((h, w, 3))  # decode_image does not returns no shape.
     img = tf.cast(img, dtype=tf.float32)
 
     if random_blur:
@@ -267,28 +201,27 @@ def generate_crops_for_training(input_queue, input_size, img_mean, random_scale,
 
     label = tf.image.decode_png(label_contents, channels=1)
 
-    if input_size is not None:
-        h, w = input_size
+    h, w = input_size
 
-        # Randomly mirror the images and labels.
-        if random_mirror:
-            print 'applying random mirror ...'
-            img, label = image_mirroring(img, label)
+    # Randomly mirror the images and labels.
+    if random_mirror:
+        print('applying random mirror ...')
+        img, label = image_mirroring(img, label)
 
-        # Randomly scale the images and labels.
-        if random_scale:
-            img, label = image_scaling(img, label, scale_rate)
+    # Randomly scale the images and labels.
+    if random_scale:
+        img, label = image_scaling(img, label, scale_rate)
 
-        # Randomly rotate the images and lables.
-        if random_rotate:
-            print 'applying random rotation...'
-            rd_rotatoin = tf.random_uniform([], -10.0, 10.0)
-            angle = rd_rotatoin / 180 * math.pi
-            img = rotate_image_tensor(img, angle, mode='black')
-            label = rotate_image_tensor(label, angle, mode='white')
+    # Randomly rotate the images and lables.
+    if random_rotate:
+        print('applying random rotation...')
+        rd_rotatoin = tf.random_uniform([], -10.0, 10.0)
+        angle = rd_rotatoin / 180 * math.pi
+        img = rotate_image_tensor(img, angle, mode='black')
+        label = rotate_image_tensor(label, angle, mode='white')
 
-        # Randomly crops the images and labels.
-        img, label = random_crop_and_pad_image_and_labels(img, label, h, w, IGNORE_LABEL)
+    # Randomly crops the images and labels.
+    img, label = random_crop_and_pad_image_and_labels(img, label, h, w, IGNORE_LABEL)
 
     return img, label
 
@@ -337,7 +270,7 @@ def output_test_set(server, color_switch, img_mean):
     images_filename_proto = data_dir + '/leftImg8bit/test' + '/*/*.png'
     images = sorted(glob.glob(images_filename_proto))
     queue = tf.train.slice_input_producer([images], shuffle=False)
-    print 'Database has %d images.' % len(images)
+    print('Database has %d images.' % len(images))
     img_contents = tf.read_file(queue[0])
 
     img = tf.image.decode_image(img_contents, channels=3)  # r,g,b
@@ -356,30 +289,128 @@ def output_test_set(server, color_switch, img_mean):
     return tf.expand_dims(img, dim=0), queue
 
 
-def find_data_path(server, dataset):
+def find_data_path(dataset):
     if dataset == 'Cityscapes':
         img_mean = np.array((72.41519599, 82.93553322, 73.18188461), dtype=np.float32)  # RGB, Cityscapes.
         num_classes = 19
-        if server == 1:
-            data_dir = '/c3d/d1/cityscape/'
-        elif server == 2:
-            data_dir = '/home/lab/lixuhong/data/cityscapes/'
-        else:
-            data_dir = '/home/jacques/workspace/database/cs'
+        data_dir = '../database/cityscapes'
     elif dataset == 'SBD':
         img_mean = np.array((122.67891434, 116.66876762, 104.00698793), dtype=np.float32)  # RGB, SBD/Pascal VOC.
         num_classes = 21
-        if server == 1:
-            data_dir = '/c3d/d1/SDB_all/'
-        elif server == 2:
-            data_dir = '/home/lab/lixuhong/data/SDB_all/'
-        else:
-            data_dir = '/home/jacques/workspace/database/SDB_all'
+        data_dir = '../database/SBD_all'
+    elif 'ADE' in dataset:
+        img_mean = np.array((122.67891434, 116.66876762, 104.00698793), dtype=np.float32)  # RGB, SBD/Pascal VOC.
+        num_classes = 150
+        data_dir = '../database/ADEChallengeData2016'
     else:
-        print("Unknown database %s" % dataset)
-        return
+        raise ValueError("Unknown database %s" % dataset)
 
     return data_dir, img_mean, num_classes
+
+
+def _read_cityscapes_image_label_list(data_dir, data_sub):
+    if data_sub not in ['train', 'val', 'test', 'train_extra']:
+        print('data sub should be train, val, test or train_extra')
+        return
+    import glob
+    images_filename_proto = data_dir + '/leftImg8bit/' + data_sub + '/*/*.png'
+    images = sorted(glob.glob(images_filename_proto))
+
+    labels_filename_proto = data_dir + '/gt/' + data_sub + '/*/*.png'
+    labels = sorted(glob.glob(labels_filename_proto))
+
+    assert len(images) == len(labels), 'images and labels have different numbers of examples. ' \
+                                       'Suggestion: add more constraint on the filename_proto, ' \
+                                       'or move undesired images to other directory.'
+    # TODO: verify if incorrectly read labels containing labelIds [0, 34].
+    # For now, see the prepation at
+    # https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/preparation/createTrainIdInstanceImgs.py
+
+    # for just checking they are corresponded.
+    for i in range(len(images)):
+        if images[i].split('leftImg8bit')[1] == labels[i].split('gt')[1]:
+            continue
+
+        print(i, images[i], labels[i])
+
+    return images, labels
+
+
+def _read_sbd_image_label_list(data_dir, data_sub):
+    if data_sub not in ['train', 'val', 'test']:
+        print('data sub should be train, val or test')
+        return
+    f = open(data_dir + '/' + data_sub + '.txt', 'r')
+    images = []
+    lables = []
+    for line in f:
+        try:
+            image, mask = line.strip("\n").split(' ')
+        except ValueError:  # Adhoc for test.
+            image = mask = line.strip("\n")
+        images.append(data_dir + image)
+        lables.append(data_dir + mask)
+    return images, lables
+
+
+def _read_ade20k_image_label_list(data_dir, data_sub):
+    if data_sub not in ['train', 'val']:
+        print('data sub should be train or val')
+        return
+
+    if data_sub == 'train':
+        data_sub = 'training'
+    else:
+        data_sub = 'validation'
+
+    import glob
+    images_filename_proto = data_dir + '/images/' + data_sub + '/*.jpg'
+    images = sorted(glob.glob(images_filename_proto))
+
+    labels_filename_proto = data_dir + '/annotations/' + data_sub + '/*.png'
+    labels = sorted(glob.glob(labels_filename_proto))
+
+    assert len(images) == len(labels)
+
+    # for just checking they are corresponded.
+    for i in range(len(images)):
+        if images[i].split('.jpg')[0].split('/')[-1] == labels[i].split('.png')[0].split('/')[-1]:
+            continue
+
+        print('< Error >', i, images[i], labels[i])
+
+    return images, labels
+
+
+def read_labeled_image_list(dataset, data_dir, data_sub):
+    """Reads txt file containing paths to images and ground truth masks.
+
+    Args:
+      data_dir: path to the directory with images and masks.
+      data_sub: path to the file with lines of the form '/path/to/image /path/to/mask'. 'train' or 'val'
+
+    Returns:
+      Two lists with all file names for images and masks, respectively.
+    """
+    if dataset == 'SBD':
+        path_read_func = _read_sbd_image_label_list
+    elif dataset == 'Cityscapes':
+        path_read_func = _read_cityscapes_image_label_list
+    elif 'ADE' in dataset:
+        path_read_func = _read_ade20k_image_label_list
+    else:
+        raise ValueError("Unknown database %s" % dataset)
+
+    if type(data_sub) is list:
+        # use more for training.
+        images, labels = [], []
+        for each_data_set in data_sub:
+            each_image_set, each_label_set = path_read_func(data_dir, each_data_set)
+            images += each_image_set
+            labels += each_label_set
+        return images, labels
+    else:
+        return path_read_func(data_dir, data_sub)
 
 
 class SegmentationImageReader(object):
@@ -387,14 +418,14 @@ class SegmentationImageReader(object):
        masks from the disk, and enqueues them into a TensorFlow queue.
     """
 
-    def __init__(self, server, dataset, data_list, input_size, random_scale,
+    def __init__(self, dataset, data_list, input_size, random_scale,
                  random_mirror, random_blur, random_rotate, color_switch, scale_rate=None):
-        self.data_dir, self.img_mean, self.num_classes = find_data_path(server, dataset)
+        self.data_dir, self.img_mean, self.num_classes = find_data_path(dataset)
         self.data_list = data_list
         self.input_size = input_size
         self.image_list, self.label_list = read_labeled_image_list(dataset, self.data_dir, self.data_list)
         assert len(self.image_list) > 0, 'No images are found.'
-        print 'Database has %d images.' % len(self.image_list)
+        print('Database has %d images.' % len(self.image_list))
         self.images = tf.convert_to_tensor(self.image_list, dtype=tf.string)
         self.labels = tf.convert_to_tensor(self.label_list, dtype=tf.string)
         shuffle = ('train' == self.data_list) or 'train' in self.data_list
@@ -402,7 +433,7 @@ class SegmentationImageReader(object):
 
         self.image, self.label = generate_crops_for_training(self.queue, self.input_size, self.img_mean,
                                                              random_scale, random_mirror, random_blur, random_rotate,
-                                                             color_switch, scale_rate=scale_rate)
+                                                             color_switch, scale_rate)
 
     def dequeue(self, batch_size):
         """Pack images and labels (crops) into a batch.
@@ -413,7 +444,7 @@ class SegmentationImageReader(object):
         Returns:
           Two tensors of size (batch_size, h, w, {3, 1}) for images and masks."""
         image_batch, label_batch = tf.train.batch([self.image, self.label],
-                                                  batch_size, batch_size * 4, 128 * batch_size)
+                                                  batch_size, batch_size * 4, 32 * batch_size)
 
         return image_batch, tf.cast(label_batch, dtype=tf.int32)
 

@@ -1,7 +1,8 @@
+from __future__ import print_function, division, absolute_import
 import numpy as np
 import tensorflow as tf
-import utils_mg as utils
-import resnet
+from model import utils_mg as utils
+from model import resnet
 
 
 class PSPNetMG(resnet.ResNet):
@@ -35,8 +36,6 @@ class PSPNetMG(resnet.ResNet):
         # ============ network structure ==============
         self.rate = [1, 1, 2, 4]
         self.strides = [1, 2, 1, 1]
-        if resnet is None:
-            print '... ERROR ... PSPNet is based on ResNet.'
 
         self.has_aux_loss = has_aux_loss
         if mode != 'train':
@@ -59,13 +58,12 @@ class PSPNetMG(resnet.ResNet):
             self.sp_group = self.new_layers_names
 
     def inference(self, images):
-        print '================== Resnet structure ======================='
-        print 'new layer names: ', self.new_layers_names
-        print 'num_residual_units: ', self.num_residual_units
-        print 'channels in each block: ', self.filters
-        print 'stride in each block: ', self.strides
-        print 'rates in each atrous convolution: ', self.rate
-        print '================== constructing network ===================='
+        print('< Resnet structure >')
+        print('new layer names: ', self.new_layers_names)
+        print('num_residual_units: ', self.num_residual_units)
+        print('channels in each block: ', self.filters)
+        print('stride in each block: ', self.strides)
+        print('rates in each atrous convolution: ', self.rate)
 
         self.image_shape = images[0].get_shape().as_list()
         self.image_shape_tensor = tf.shape(images[0])
@@ -76,7 +74,7 @@ class PSPNetMG(resnet.ResNet):
         height = self.image_shape[1]
         image_shape = tf.cast(tf.stack([height, height]), tf.int32)
         pooling_output_size = tf.cast(tf.stack([height / 8, height / 8]), tf.int32)
-        print 'size of network\'s output: ', [height, height]
+        print('size of network\'s output: ', [height, height])
         pool_rates = [6, 3, 2, 1]
         pool_size = height / 8 / np.array(pool_rates)
 
@@ -84,7 +82,7 @@ class PSPNetMG(resnet.ResNet):
         if self.bn_frozen:
             bn_mode = 'test'
 
-        print 'shape input: ', x[0].get_shape()
+        print('shape input: ', x[0].get_shape())
         if self.structure_in_paper:
             with tf.variable_scope('conv1_1'):
                 trainable_ = False if self.fix_blocks > 0 else True
@@ -97,7 +95,7 @@ class PSPNetMG(resnet.ResNet):
                                      use_gamma=self.bn_use_gamma, use_beta=self.bn_use_beta,
                                      bn_epsilon=self.bn_epsilon, bn_ema=self.bn_ema, float_type=self.float_type)
                 x = utils.relu(x)
-                print 'shape after conv1_1: ', x[0].get_shape()
+                print('shape after conv1_1: ', x[0].get_shape())
 
             with tf.variable_scope('conv1_2'):
                 trainable_ = False if self.fix_blocks > 0 else True
@@ -110,7 +108,7 @@ class PSPNetMG(resnet.ResNet):
                                      use_gamma=self.bn_use_gamma, use_beta=self.bn_use_beta,
                                      bn_epsilon=self.bn_epsilon, bn_ema=self.bn_ema, float_type=self.float_type)
                 x = utils.relu(x)
-                print 'shape after conv1_2: ', x[0].get_shape()
+                print('shape after conv1_2: ', x[0].get_shape())
 
             with tf.variable_scope('conv1_3'):
                 trainable_ = False if self.fix_blocks > 0 else True
@@ -123,10 +121,10 @@ class PSPNetMG(resnet.ResNet):
                                      use_gamma=self.bn_use_gamma, use_beta=self.bn_use_beta,
                                      bn_epsilon=self.bn_epsilon, bn_ema=self.bn_ema, float_type=self.float_type)
                 x = utils.relu(x)
-                print 'shape after conv1_3: ', x[0].get_shape()
+                print('shape after conv1_3: ', x[0].get_shape())
 
                 x = utils.max_pool(x, 3, 2, self.data_format)
-                print 'shape after pool1: ', x[0].get_shape()
+                print('shape after pool1: ', x[0].get_shape())
         else:
             with tf.variable_scope('conv1'):
                 trainable_ = False if self.fix_blocks > 0 else True
@@ -139,7 +137,7 @@ class PSPNetMG(resnet.ResNet):
                                      bn_epsilon=self.bn_epsilon, bn_ema=self.bn_ema, float_type=self.float_type)
                 x = utils.relu(x)
                 x = utils.max_pool(x, 3, 2, self.data_format)
-            print 'shape after pool1: ', x[0].get_shape()
+            print('shape after pool1: ', x[0].get_shape())
 
         for block_index in range(len(self.num_residual_units)):
             for unit_index in range(self.num_residual_units[block_index]):
@@ -175,7 +173,7 @@ class PSPNetMG(resnet.ResNet):
                         auxiliary_x = utils.dropout(auxiliary_x, keep_prob=0.9)
                     with tf.variable_scope('aux_logits'):
                         # new layers
-                        print 'aux_logits: ', auxiliary_x[0].get_shape(),
+                        print('aux_logits: ', auxiliary_x[0].get_shape())
                         auxiliary_x = utils.fully_connected(auxiliary_x, self.num_classes, trainable=True,
                                                             data_format=self.data_format, initializer=self.initializer,
                                                             float_type=self.float_type)
@@ -187,7 +185,7 @@ class PSPNetMG(resnet.ResNet):
                                                                self.data_format,
                                                                self.resize_images_method,
                                                                self.train_conv2dt)
-                    print ' auxiliary_x for loss function: ', self.auxiliary_x[0].get_shape()
+                    print('upsampled auxiliary_x for loss function: ', self.auxiliary_x[0].get_shape())
 
                 # psp operations, after block4/unit3, add psp/pool6321/ and block4/unit4.
                 if block_index + 1 == 4 and unit_index + 1 == self.num_residual_units[-1]:
@@ -211,11 +209,11 @@ class PSPNetMG(resnet.ResNet):
                                                                use_gamma=self.bn_use_gamma, use_beta=self.bn_use_beta,
                                                                bn_epsilon=self.bn_epsilon, bn_ema=self.bn_ema,
                                                                float_type=self.float_type)
-                                print 'pool%d' % pool_rates[pool_index], 'pooled size: ', pool_output[0].get_shape()
+                                print('pool%d' % pool_rates[pool_index], 'pooled size: ', pool_output[0].get_shape())
                                 pool_output = utils.relu(pool_output)
                                 pool_output = utils.resize_images(pool_output, pooling_output_size, self.data_format,
                                                                   self.resize_images_method)
-                                print 'pool%d' % pool_rates[pool_index], 'output size: ', pool_output[0].get_shape()
+                                print('pool%d' % pool_rates[pool_index], 'output size: ', pool_output[0].get_shape())
                                 to_concat.append(pool_output)
                     x = utils.concat(to_concat, axis=1 if self.data_format == 'NCHW' else 3)
 
@@ -235,11 +233,11 @@ class PSPNetMG(resnet.ResNet):
                         if self.mode == 'train':
                             x = utils.dropout(x, keep_prob=0.9)
 
-            print 'shape after block %d: ' % (block_index+1), x[0].get_shape()
+            print('shape after block %d: ' % (block_index+1), x[0].get_shape())
 
         with tf.variable_scope('logits'):
             # new layers
-            print 'logits: ', x[0].get_shape(),
+            print('logits: ', x[0].get_shape(),)
             logits = utils.fully_connected(x, self.num_classes, trainable=True,
                                            data_format=self.data_format, initializer=self.initializer,
                                            float_type=self.float_type)
@@ -252,20 +250,19 @@ class PSPNetMG(resnet.ResNet):
                                               self.resize_images_method,
                                               self.train_conv2dt)
 
-        print 'logits: ', self.logits[0].get_shape()
+        print('upsampled logits: ', self.logits[0].get_shape())
         self.probabilities = tf.nn.softmax(self.logits[0], dim=1 if self.data_format == 'NCHW' else 3)
         self.predictions = tf.argmax(self.logits[0], axis=1 if self.data_format == 'NCHW' else 3)
 
-        print '================== network constructed ===================='
         return self.logits
 
     def _normal_loss(self, logits, labels):
-        print 'normal cross entropy with softmax ... '
+        print('normal cross entropy with softmax ... ')
         xent = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
         return tf.reduce_sum(xent)
 
     def _focal_loss_1(self, logits, labels, gamma=2):
-        print 'focal loss: cross entropy with softmax ... '
+        print('focal loss: cross entropy with softmax ... ')
         proba = tf.nn.softmax(logits, dim=-1)
         if gamma == 2:
             proba_gamma = tf.square(1 - proba)
@@ -285,8 +282,8 @@ class PSPNetMG(resnet.ResNet):
         num_valide_pixel = 0
         for i in range(len(list_labels)):
             with tf.device('/gpu:%d' % i):
-                print 'logit size:', logits[i].get_shape()
-                print 'label size:', list_labels[i].get_shape()
+                print('logit size:', logits[i].get_shape())
+                print('label size:', list_labels[i].get_shape())
 
                 logit = tf.reshape(logits[i], [-1, self.num_classes])
                 label = tf.reshape(list_labels[i], [-1, ])
@@ -305,7 +302,7 @@ class PSPNetMG(resnet.ResNet):
                 total_loss += loss
 
                 if self.has_aux_loss:
-                    print 'auxiliaire_logits size:', self.auxiliary_x[i].get_shape()
+                    print('auxiliaire_logits size:', self.auxiliary_x[i].get_shape())
                     aux_l = tf.reshape(self.auxiliary_x[i], [-1, self.num_classes])
                     aux_l = tf.gather(aux_l, indice)
 
@@ -333,18 +330,18 @@ class PSPNetMG(resnet.ResNet):
         if self.train_like_in_paper:
             self.cost = self.compute_loss(labels, logits)
             if self.optimizer == 'sgd':
-                print 'Applying Gradient Descent Optimizer...'
+                print('Applying Gradient Descent Optimizer...')
                 opt_existing = tf.train.GradientDescentOptimizer(self.lrn_rate_placeholder)
                 opt_new_norm = tf.train.GradientDescentOptimizer(self.lrn_rate_placeholder * 10)
                 opt_new_bias = tf.train.GradientDescentOptimizer(self.lrn_rate_placeholder * 20)
             elif self.optimizer == 'mom':
-                print 'Applying Momentum Optimizer...'
+                print('Applying Momentum Optimizer...')
                 opt_existing = tf.train.MomentumOptimizer(self.lrn_rate_placeholder, self.momentum)
                 opt_new_norm = tf.train.MomentumOptimizer(self.lrn_rate_placeholder * 10, self.momentum)
                 opt_new_bias = tf.train.MomentumOptimizer(self.lrn_rate_placeholder * 20, self.momentum)
             else:
-                print 'unknown optimizer name: ', self.optimizer
-                print 'Default to Momentum.'
+                print('unknown optimizer name: ', self.optimizer)
+                print('Default to Momentum.')
                 opt_existing = tf.train.MomentumOptimizer(self.lrn_rate_placeholder, self.momentum)
                 opt_new_norm = tf.train.MomentumOptimizer(self.lrn_rate_placeholder * 10, self.momentum)
                 opt_new_bias = tf.train.MomentumOptimizer(self.lrn_rate_placeholder * 20, self.momentum)
@@ -352,11 +349,11 @@ class PSPNetMG(resnet.ResNet):
             existing_weights, new_normal_weights, new_bias_weights = self.get_different_variables()
 
             for v in existing_weights:
-                print 'existing weights name: ', v.name
+                print('existing weights name: ', v.name)
             for v in new_normal_weights:
-                print 'new weights name: ', v.name
+                print('new weights name: ', v.name)
             for v in new_bias_weights:
-                print 'new bias name: ', v.name
+                print('new bias name: ', v.name)
 
             grads = tf.gradients(self.cost, existing_weights + new_normal_weights + new_bias_weights,
                                  colocate_gradients_with_ops=True)
@@ -391,10 +388,10 @@ class PSPNetMG(resnet.ResNet):
             existing_weights.append(v)
 
         for v in existing_weights:
-            print 'existing weights name: ', v.name
+            print('existing weights name: ', v.name)
         for v in new_normal_weights:
-            print 'new weights name: ', v.name
+            print('new weights name: ', v.name)
         for v in new_bias_weights:
-            print 'new bias name: ', v.name
+            print('new bias name: ', v.name)
 
         return existing_weights, new_normal_weights, new_bias_weights

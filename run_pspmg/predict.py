@@ -58,7 +58,6 @@ def predict(i_ckpt):
 
     with tf.device('/cpu:0'):
         reader = SegmentationImageReader(
-            FLAGS.server,
             FLAGS.database,
             FLAGS.mode,
             (image_size, image_size),

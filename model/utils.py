@@ -1,3 +1,4 @@
+from __future__ import print_function, division, absolute_import
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.training import moving_averages
@@ -487,7 +488,7 @@ def conv2d_transpose(name, x, out_channels,
 
         weights = get_transpose_filter(weights_shape, trainable)
         if trainable:
-            print 'training conv2d_transpose layer: ', name
+            print('training conv2d_transpose layer: ', name)
         deconv = tf.nn.conv2d_transpose(x, weights, output_shape,
                                         strides=strides, padding='SAME', data_format=data_format)
 

@@ -1,4 +1,4 @@
-
+from __future__ import print_function, division, absolute_import
 import numpy as np
 import tensorflow as tf
 
@@ -73,8 +73,8 @@ class Network(object):
         elif self.optimizer == 'adam':
             optimizer = tf.train.AdamOptimizer(self.lrn_rate_placeholder, self.momentum)
         else:
-            print 'unknown optimizer name: ', self.optimizer
-            print 'Default to Momentum.'
+            print('unknown optimizer name: ', self.optimizer)
+            print('Default to Momentum.')
             optimizer = tf.train.MomentumOptimizer(self.lrn_rate_placeholder, self.momentum)
 
         grads_vars = optimizer.compute_gradients(self.cost, colocate_gradients_with_ops=True)
@@ -96,9 +96,9 @@ class Network(object):
 
     def _decay(self, mode):
         """L2 weight decay loss."""
-        print '================== weight decay info   ===================='
+        print('< weight decay info >')
         if mode == 0:
-            print 'Applying L2 regularization...'
+            print('Applying L2 regularization...')
             losses_existing_layers = 0.0
             losses_new_layers = 0.0
             for v in tf.trainable_variables():

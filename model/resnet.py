@@ -1,12 +1,11 @@
-
+from __future__ import print_function, division, absolute_import
 """ResNet model.
 Related papers:
 https://arxiv.org/pdf/1512.03385v1.pdf
 """
 
 import tensorflow as tf
-import utils
-import network_base
+from model import utils, network_base
 
 
 class ResNet(network_base.Network):
@@ -56,19 +55,20 @@ class ResNet(network_base.Network):
         elif resnet == 'resnet_v1_152':
             self.num_residual_units = [3, 8, 36, 3]
         else:
-            print '... ERROR from resnet.py ... '
+            raise ValueError('Unknown resnet structure: %s' % resnet)
 
     def inference(self, images):
-        print '================== Resnet structure ======================='
-        print 'num_residual_units: ', self.num_residual_units
-        print 'channels in each block: ', self.filters
-        print 'stride in each block: ', self.strides
-        print '================== constructing network ===================='
+        raise NotImplementedError()
+
+        print('================== Resnet structure =======================')
+        print('num_residual_units: ', self.num_residual_units)
+        print('channels in each block: ', self.filters)
+        print('stride in each block: ', self.strides)
+        print('================== constructing network ====================')
 
         x = utils.input_data(images, self.data_format)
         x = tf.cast(x, self.float_type)
 
-        print 'shape input: ', x.get_shape()
         with tf.variable_scope('conv1'):
             trainable_ = False if self.fix_blocks > 0 else True
             self.fix_blocks -= 1
@@ -81,7 +81,6 @@ class ResNet(network_base.Network):
                                  float_type=self.float_type)
             x = utils.relu(x)
             x = utils.max_pool(x, 3, 2, self.data_format)
-        print 'shape after pool1: ', x.get_shape()
 
         for block_index in range(len(self.num_residual_units)):
             for unit_index in range(self.num_residual_units[block_index]):
@@ -101,7 +100,6 @@ class ResNet(network_base.Network):
                                                       bn_use_gamma=self.bn_use_gamma, bn_use_beta=self.bn_use_beta,
                                                       bn_epsilon=self.bn_epsilon, bn_ema=self.bn_ema,
                                                       float_type=self.float_type)
-            print 'shape after block %d: ' % (block_index+1), x.get_shape()
 
         with tf.variable_scope('logits'):
             x = utils.global_avg_pool(x, self.data_format)
@@ -113,5 +111,4 @@ class ResNet(network_base.Network):
             self.logits = tf.reshape(self.logits, (-1, self.num_classes))
             self.predictions = tf.nn.softmax(self.logits)
 
-        print '================== network constructed ===================='
         return self.logits
