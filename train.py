@@ -381,8 +381,8 @@ def eval(i_ckpt):
             random_rotate=False,
             color_switch=FLAGS.color_switch)
 
-    images_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 3])]
-    labels_pl = [tf.placeholder(tf.int32, [None, input_size, input_size, 1])]
+    images_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 3])] * FLAGS.gpu_num
+    labels_pl = [tf.placeholder(tf.int32, [None, input_size, input_size, 1])] * FLAGS.gpu_num
 
     model = pspnet_mg.PSPNetMG(reader.num_classes,
                                mode='val', resnet=FLAGS.network,
@@ -391,7 +391,7 @@ def eval(i_ckpt):
                                has_aux_loss=False,
                                structure_in_paper=FLAGS.structure_in_paper)
     logits = model.inference(images_pl)
-    probas_op = tf.nn.softmax(logits, dim=1 if FLAGS.data_format == 'NCHW' else 3)
+    probas_op = tf.nn.softmax(logits[0], dim=1 if FLAGS.data_format == 'NCHW' else 3)
     # ========================= end of building model ================================
 
     gpu_options = tf.GPUOptions(allow_growth=False)
@@ -408,7 +408,7 @@ def eval(i_ckpt):
         eval_step = i_ckpt.split('-')[-1]
         print('Succesfully loaded model from %s at step=%s.' % (i_ckpt, eval_step))
 
-    print('< eval process begins >')
+    print('\n< eval process begins >\n')
     average_loss = 0.0
     confusion_matrix = np.zeros((reader.num_classes, reader.num_classes), dtype=np.int64)
 
@@ -422,6 +422,7 @@ def eval(i_ckpt):
         max_iter = FLAGS.test_max_iter
 
     step = 0
+    show_iter = max_iter // 20
     while step < max_iter:
         image, label = cv2.imread(images_filenames[step], 1), cv2.imread(labels_filenames[step], 0)
         label = np.reshape(label, [1, label.shape[0], label.shape[1], 1])
@@ -449,7 +450,7 @@ def eval(i_ckpt):
         prediction = np.argmax(total_logits, axis=-1)
         step += 1
         compute_confusion_matrix(label, prediction, confusion_matrix)
-        if step % 20 == 0:
+        if step % show_iter == 0:
             print('%s %s] %d / %d. iou updating' \
                   % (str(datetime.datetime.now()), str(os.getpid()), step, max_iter))
             compute_iou(confusion_matrix)
