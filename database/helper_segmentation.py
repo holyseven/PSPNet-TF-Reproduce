@@ -39,7 +39,8 @@ class ImageSplitter(object):
 
     def reassemble_crops(self, proba_crops):
         # in general, crops are probabilities of self.split_crops.
-        assert proba_crops.shape[0:3] == self.split_crops.shape[0:3]
+        assert proba_crops.shape[0:3] == self.split_crops.shape[0:3], \
+            '%s vs %s' % (proba_crops.shape[0:3], self.split_crops.shape[0:3])
         # (n, crop_image_size, crop_image_size, num_classes) vs (n, crop_image_size, crop_image_size, 3)
 
         # reassemble

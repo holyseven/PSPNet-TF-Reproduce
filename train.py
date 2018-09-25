@@ -13,7 +13,7 @@ import math
 import numpy as np
 import cv2
 from database.helper_segmentation import *
-from database.reader_segmentation import SegmentationImageReader
+from database.reader_segmentation import SegmentationImageReader, find_data_path, read_labeled_image_list
 from experiment_manager.utils import LogDir, sorted_str_dict
 
 import argparse
@@ -335,7 +335,7 @@ def train(resume_step=None):
             left_hours = 0
 
             if t0 is not None:
-                delta_t = (datetime.datetime.now() - t0).seconds
+                delta_t = (datetime.datetime.now() - t0).total_seconds()
                 left_time = (max_iter - step) / show_period * delta_t
                 left_hours = left_time/3600.0
 
@@ -371,20 +371,13 @@ def eval(i_ckpt):
 
     input_size = FLAGS.test_image_size
     with tf.device('/cpu:0'):
-        reader = SegmentationImageReader(
-            FLAGS.database,
-            'val',
-            (input_size, input_size),
-            random_scale=False,
-            random_mirror=False,
-            random_blur=False,
-            random_rotate=False,
-            color_switch=FLAGS.color_switch)
+        data_dir, img_mean, num_classes = find_data_path(FLAGS.database)
+        images_filenames, labels_filenames = read_labeled_image_list(FLAGS.database, data_dir, 'val')
 
-    images_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 3])] * FLAGS.gpu_num
-    labels_pl = [tf.placeholder(tf.int32, [None, input_size, input_size, 1])] * FLAGS.gpu_num
+    images_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 3])]
+    labels_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 1])]
 
-    model = pspnet_mg.PSPNetMG(reader.num_classes,
+    model = pspnet_mg.PSPNetMG(num_classes,
                                mode='val', resnet=FLAGS.network,
                                data_format=FLAGS.data_format,
                                float_type=float_type,
@@ -410,11 +403,7 @@ def eval(i_ckpt):
 
     print('\n< eval process begins >\n')
     average_loss = 0.0
-    confusion_matrix = np.zeros((reader.num_classes, reader.num_classes), dtype=np.int64)
-
-    images_filenames = reader.image_list
-    labels_filenames = reader.label_list
-    img_mean = reader.img_mean
+    confusion_matrix = np.zeros((num_classes, num_classes), dtype=np.int64)
 
     if FLAGS.test_max_iter is None:
         max_iter = len(images_filenames)
