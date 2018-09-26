@@ -116,7 +116,7 @@ def compute_iou(confusion_matrix):
 
     iou = np.divide(cm_diag, denominator)
     for i in range(confusion_matrix.shape[0]):
-        print('%.1f' % (iou[i]*100), '&', end='')
+        print('%.1f' % (iou[i]*100), '& ', end='')
     print('%.1f' % (np.mean(iou)*100), '\\\\')
     return np.mean(iou)
 
