@@ -15,10 +15,10 @@ def image_scaling(img, label, scale_rate):
         scale = tf.random_uniform([1], minval=scale_rate[0], maxval=scale_rate[1], seed=None)
     h_new = tf.to_int32(tf.multiply(tf.cast(tf.shape(img)[0], tf.float32), scale))
     w_new = tf.to_int32(tf.multiply(tf.cast(tf.shape(img)[1], tf.float32), scale))
-    new_shape = tf.squeeze(tf.stack([h_new, w_new]), squeeze_dims=[1])
+    new_shape = tf.squeeze(tf.stack([h_new, w_new]), axis=[1])
     img = tf.image.resize_images(img, new_shape)
     label = tf.image.resize_nearest_neighbor(tf.expand_dims(label, 0), new_shape)
-    label = tf.squeeze(label, squeeze_dims=[0])
+    label = tf.squeeze(label, axis=[0])
 
     return img, label
 
@@ -331,7 +331,7 @@ def _read_cityscapes_image_label_list(data_dir, data_sub):
         if images[i].split('leftImg8bit')[1] == labels[i].split('gt')[1]:
             continue
 
-        print(i, images[i], labels[i])
+        print('< Error >', i, images[i], labels[i])
 
     return images, labels
 

@@ -455,7 +455,7 @@ def eval(i_ckpt):
 def main(_):
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     gpu = str(get_available_gpus(FLAGS.gpu_num))
-    print(gpu)
+    print('GPU devices: ', gpu)
     os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 
     # ============================================================================
