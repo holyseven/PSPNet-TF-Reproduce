@@ -1,3 +1,4 @@
+from __future__ import print_function, division, absolute_import
 import numpy as np
 import cv2
 
@@ -64,28 +65,28 @@ def numpy_crop_image(image, dif_height, dif_width):
     assert len(image.shape) == 3
     if dif_height < 0:
         if dif_height % 2 == 0:
-            pad_before_h = - dif_height / 2
-            pad_after_h = dif_height / 2
+            pad_before_h = - dif_height // 2
+            pad_after_h = dif_height // 2
         else:
-            pad_before_h = - dif_height / 2
-            pad_after_h = dif_height / 2
+            pad_before_h = - dif_height // 2
+            pad_after_h = dif_height // 2
         image = image[pad_before_h:pad_after_h]
 
     if dif_width < 0:
         if dif_width % 2 == 0:
-            pad_before_w = - dif_width / 2
-            pad_after_w = dif_width / 2
+            pad_before_w = - dif_width // 2
+            pad_after_w = dif_width // 2
         else:
-            pad_before_w = - dif_width / 2
-            pad_after_w = dif_width / 2
+            pad_before_w = - dif_width // 2
+            pad_after_w = dif_width // 2
         image = image[:, pad_before_w:pad_after_w]
 
     return image
 
 
 def decide_intersection(total_length, crop_length):
-    stride = crop_length * 2 / 3
-    times = (total_length - crop_length) / stride + 1
+    stride = crop_length * 2 // 3
+    times = (total_length - crop_length) // stride + 1
     cropped_starting = []
     for i in range(times):
         cropped_starting.append(stride*i)
@@ -115,8 +116,8 @@ def compute_iou(confusion_matrix):
 
     iou = np.divide(cm_diag, denominator)
     for i in range(confusion_matrix.shape[0]):
-        print '%.1f' % (iou[i]*100), '&',
-    print '%.1f' % (np.mean(iou)*100), '\\\\'
+        print('%.1f' % (iou[i]*100), '&', end='')
+    print('%.1f' % (np.mean(iou)*100), '\\\\')
     return np.mean(iou)
 
 
@@ -136,52 +137,24 @@ def numpy_pad_image(image, total_padding_h, total_padding_w, image_padding_value
     pad_before_h = pad_after_h = 0
     if total_padding_h < 0:
         if total_padding_h % 2 == 0:
-            pad_before_h = pad_after_h = - total_padding_h / 2
+            pad_before_h = pad_after_h = - total_padding_h // 2
         else:
-            pad_before_h = - total_padding_h / 2
-            pad_after_h = - total_padding_h / 2 + 1
+            pad_before_h = - total_padding_h // 2
+            pad_after_h = - total_padding_h // 2 + 1
     if total_padding_w < 0:
         if total_padding_w % 2 == 0:
-            pad_before_w = pad_after_w = - total_padding_w / 2
+            pad_before_w = pad_after_w = - total_padding_w // 2
         else:
-            pad_before_w = - total_padding_w / 2
-            pad_after_w = - total_padding_w / 2 + 1
+            pad_before_w = - total_padding_w // 2
+            pad_after_w = - total_padding_w // 2 + 1
     image_crop = np.pad(image,
                         ((pad_before_h, pad_after_h), (pad_before_w, pad_after_w), (0, 0)),
                         mode='constant', constant_values=image_padding_value)
     return image_crop
 
 
-def numpy_pad(image, label, total_padding_h, total_padding_w, image_padding_value=0, label_padding_value=255):
-    # (height, width, channel)
-    assert len(image.shape) == 3
-    # (height, width)
-    assert len(label.shape) == 2
-    pad_before_w = pad_after_w = 0
-    pad_before_h = pad_after_h = 0
-    if total_padding_h < 0:
-        if total_padding_h % 2 == 0:
-            pad_before_h = pad_after_h = - total_padding_h / 2
-        else:
-            pad_before_h = - total_padding_h / 2
-            pad_after_h = - total_padding_h / 2 + 1
-    if total_padding_w < 0:
-        if total_padding_w % 2 == 0:
-            pad_before_w = pad_after_w = - total_padding_w / 2
-        else:
-            pad_before_w = - total_padding_w / 2
-            pad_after_w = - total_padding_w / 2 + 1
-    image_crop = np.pad(image,
-                        ((pad_before_h, pad_after_h), (pad_before_w, pad_after_w), (0, 0)),
-                        mode='constant', constant_values=image_padding_value)
-    label_crop = np.pad(label,
-                        ((pad_before_h, pad_after_h), (pad_before_w, pad_after_w)),
-                        mode='constant', constant_values=label_padding_value)
-    return image_crop, label_crop
-
-
 if __name__ == '__main__':
-    print decide_intersection(int(2048 * 1.75), 864)
+    print(decide_intersection(int(2048 * 1.75), 864))
     assert decide_intersection(int(2048 * 1.75), 864) == [0, 576, 1152, 1728, 2304, 2720]
     assert decide_intersection(int(1024 * 1.75), 864) == [0, 576, 928]
     assert decide_intersection(int(2048 * 0.5), 864) == [0, 160]

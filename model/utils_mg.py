@@ -410,13 +410,13 @@ def bottleneck_residual_v2(list_input, out_channels, stride, data_format,
                                           initializer=initializer, float_type=float_type, bias_scope='biases')
 
         with tf.variable_scope('conv1'):
-            residual = conv2d_same(preact, out_channels / 4, 1, 1, trainable, 1, data_format, initializer,
+            residual = conv2d_same(preact, out_channels // 4, 1, 1, trainable, 1, data_format, initializer,
                                    float_type=float_type)
             residual = batch_norm(residual, bn_mode, data_format, float_type, trainable,
                                   bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema)
             residual = relu(residual)
         with tf.variable_scope('conv2'):
-            residual = conv2d_same(residual, out_channels / 4, 3, stride, trainable, rate, data_format, initializer,
+            residual = conv2d_same(residual, out_channels // 4, 3, stride, trainable, rate, data_format, initializer,
                                    float_type=float_type)
             residual = batch_norm(residual, bn_mode, data_format, float_type, trainable,
                                   bn_use_gamma, bn_use_beta, bn_epsilon, bn_ema)

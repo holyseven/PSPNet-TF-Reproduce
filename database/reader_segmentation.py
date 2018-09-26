@@ -216,7 +216,7 @@ def generate_crops_for_training(input_queue, input_size, img_mean, random_scale,
     if random_rotate:
         print('applying random rotation...')
         rd_rotatoin = tf.random_uniform([], -10.0, 10.0)
-        angle = rd_rotatoin / 180 * math.pi
+        angle = rd_rotatoin / 180.0 * math.pi
         img = rotate_image_tensor(img, angle, mode='black')
         label = rotate_image_tensor(label, angle, mode='white')
 

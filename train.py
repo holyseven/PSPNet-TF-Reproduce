@@ -375,7 +375,7 @@ def eval(i_ckpt):
         images_filenames, labels_filenames = read_labeled_image_list(FLAGS.database, data_dir, 'val')
 
     images_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 3])]
-    labels_pl = [tf.placeholder(tf.float32, [None, input_size, input_size, 1])]
+    labels_pl = [tf.placeholder(tf.int32, [None, input_size, input_size, 1])]
 
     model = pspnet_mg.PSPNetMG(num_classes,
                                mode='val', resnet=FLAGS.network,
@@ -390,7 +390,7 @@ def eval(i_ckpt):
     gpu_options = tf.GPUOptions(allow_growth=False)
     config = tf.ConfigProto(log_device_placement=False, gpu_options=gpu_options, allow_soft_placement=True)
     sess = tf.Session(config=config)
-    sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
+    # sess.run([tf.global_variables_initializer(), tf.local_variables_initializer()])
 
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)

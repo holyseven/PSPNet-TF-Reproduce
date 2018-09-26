@@ -83,7 +83,7 @@ class PSPNetMG(network_base.Network):
             with tf.device('/gpu:%d' % i):
                 # < valid pixel indice >
                 label = tf.reshape(labels[i], [-1, ])
-                indice = tf.squeeze(tf.where(tf.less_equal(label, self.num_classes - 1)), 1)
+                indice = tf.squeeze(tf.where(tf.less(label, self.num_classes)), 1)
                 label = tf.cast(tf.gather(label, indice), tf.int32)
                 num_valide_pixel += tf.shape(label)[0]
 
@@ -151,9 +151,9 @@ def pspnet_with_list(images, output_num_classes, bn_mode, has_aux_loss,
     list_activations = []
     image_shape = images[0].get_shape().as_list()
     image_size = image_shape[1]
-    output_size = tf.cast(tf.stack([image_size / 8, image_size / 8]), tf.int32)
+    output_size = tf.cast(tf.stack([image_size // 8, image_size // 8]), tf.int32)
     pool_rates = [6, 3, 2, 1]
-    pool_size = image_size / 8 / np.array(pool_rates)
+    pool_size = image_size // 8 // np.array(pool_rates)
     if resnet == 'resnet_v1_101':
         num_residual_units = [3, 4, 23, 3]
         rate = [1, 1, 2, 4]
@@ -257,7 +257,7 @@ def pspnet_with_list(images, output_num_classes, bn_mode, has_aux_loss,
                                                          utils.stride_arr(pool_size[pool_index], data_format),
                                                          utils.stride_arr(pool_size[pool_index], data_format),
                                                          'SAME', data_format=data_format)
-                            pool_output = utils.conv2d_same(pool_output, filters[block_index] / 4, 1, 1,
+                            pool_output = utils.conv2d_same(pool_output, filters[block_index] // 4, 1, 1,
                                                             trainable=True,
                                                             data_format=data_format,
                                                             initializer=initializer,
@@ -276,7 +276,7 @@ def pspnet_with_list(images, output_num_classes, bn_mode, has_aux_loss,
                 # block4/unit4
                 with tf.variable_scope('block%d/unit_%d' % (block_index + 1, unit_index + 2)):
                     # new layers
-                    x = utils.conv2d_same(x, filters[block_index] / 4, 3, 1, trainable=True,
+                    x = utils.conv2d_same(x, filters[block_index] // 4, 3, 1, trainable=True,
                                           data_format=data_format, initializer=initializer,
                                           float_type=float_type)
                     x = utils.batch_norm(x, bn_mode, data_format=data_format, float_type=float_type)
