@@ -175,13 +175,12 @@ def rotate_image_tensor(image, angle, mode='black'):
 def generate_crops_for_training(input_queue, input_size, img_mean, random_scale, random_mirror, random_blur,
                                 random_rotate, color_switch, scale_rate):
     assert input_size is not None
-    h, w = input_size
 
     img_contents = tf.read_file(input_queue[0])
     label_contents = tf.read_file(input_queue[1])
 
     img = tf.image.decode_image(img_contents, channels=3)
-    img.set_shape((h, w, 3))  # decode_image does not returns no shape.
+    img.set_shape((None, None, 3))  # decode_image does not returns no shape.
     img = tf.cast(img, dtype=tf.float32)
 
     if random_blur:

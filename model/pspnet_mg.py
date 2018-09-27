@@ -294,13 +294,13 @@ def pspnet_with_list(images, output_num_classes, bn_mode, has_aux_loss,
         logits = utils.fully_connected(x, output_num_classes, trainable=True,
                                        data_format=data_format, initializer=initializer,
                                        float_type=float_type)
-        list_activations.append(x)
+        list_activations.append(logits)
 
     with tf.variable_scope('up_sample'):
         logits = utils.resize_images(logits, image_shape[1:3] if data_format == 'NHWC' else image_shape[2:4],
                                      data_format)
-        if verbo: print('logits after upsampling: ', x[0].get_shape())
-        list_activations.append(x)
+        if verbo: print('logits after upsampling: ', logits[0].get_shape())
+        list_activations.append(logits)
 
     if return_list_activations:
         if has_aux_loss:
