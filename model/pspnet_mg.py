@@ -110,7 +110,11 @@ class PSPNetMG(network_base.Network):
         self.loss = tf.truediv(tf.reduce_sum(losses), num_valide_pixel)
         self.wd = self._decay(self.wd_mode)
         total_cost = self.loss + self.wd
-        train_ops.append(self.apply_gradients_from_cost(total_cost))
+
+        if self.train_like_in_paper:
+            train_ops.append(self.compute_gradients_different_lr(total_cost))
+        else:
+            train_ops.append(self.apply_gradients_from_cost(total_cost))
 
         return train_ops
 
@@ -125,6 +129,58 @@ class PSPNetMG(network_base.Network):
                                       self.data_format, self.float_type,
                                       return_list_activations=False, verbo=True)
         return logits
+
+    def compute_gradients_different_lr(self, cost):
+        def get_different_variables(new_layers_names):
+            existing_weights = []
+            new_normal_weights = []
+            new_bias_weights = []
+            for v in tf.trainable_variables():
+                if any(elem in v.name for elem in new_layers_names):
+                    if 'bias' in v.name:
+                        new_bias_weights.append(v)
+                    else:
+                        new_normal_weights.append(v)
+                    continue
+                existing_weights.append(v)
+
+            return existing_weights, new_normal_weights, new_bias_weights
+
+        if self.optimizer == 'sgd':
+            opt_existing = tf.train.GradientDescentOptimizer(self.lrn_rate_ph)
+            opt_new_norm = tf.train.GradientDescentOptimizer(self.lrn_rate_ph * 10)
+            opt_new_bias = tf.train.GradientDescentOptimizer(self.lrn_rate_ph * 20)
+        elif self.optimizer == 'mom':
+            opt_existing = tf.train.MomentumOptimizer(self.lrn_rate_ph, self.momentum)
+            opt_new_norm = tf.train.MomentumOptimizer(self.lrn_rate_ph * 10, self.momentum)
+            opt_new_bias = tf.train.MomentumOptimizer(self.lrn_rate_ph * 20, self.momentum)
+        elif self.optimizer == 'rmsp':
+            opt_existing = tf.train.RMSPropOptimizer(self.lrn_rate_ph)
+            opt_new_norm = tf.train.RMSPropOptimizer(self.lrn_rate_ph)
+            opt_new_bias = tf.train.RMSPropOptimizer(self.lrn_rate_ph)
+        elif self.optimizer == 'adam':
+            opt_existing = tf.train.AdamOptimizer(self.lrn_rate_ph, self.momentum)
+            opt_new_norm = tf.train.AdamOptimizer(self.lrn_rate_ph, self.momentum)
+            opt_new_bias = tf.train.AdamOptimizer(self.lrn_rate_ph, self.momentum)
+        else:
+            opt_existing = tf.train.MomentumOptimizer(self.lrn_rate_ph, self.momentum)
+            opt_new_norm = tf.train.MomentumOptimizer(self.lrn_rate_ph * 10, self.momentum)
+            opt_new_bias = tf.train.MomentumOptimizer(self.lrn_rate_ph * 20, self.momentum)
+
+        existing_weights, new_normal_weights, new_bias_weights = get_different_variables(self.new_layers_names)
+
+        grads = tf.gradients(cost, existing_weights + new_normal_weights + new_bias_weights,
+                             colocate_gradients_with_ops=True)
+
+        grads_existing = grads[:len(existing_weights)]
+        grads_new_norm = grads[len(existing_weights): (len(existing_weights) + len(new_normal_weights))]
+        grads_new_bias = grads[(len(existing_weights) + len(new_normal_weights)):]
+        train_existing = opt_existing.apply_gradients(zip(grads_existing, existing_weights))
+        train_new_norm = opt_new_norm.apply_gradients(zip(grads_new_norm, new_normal_weights))
+        train_new_bias = opt_new_bias.apply_gradients(zip(grads_new_bias, new_bias_weights))
+
+        apply_op = tf.group(train_existing, train_new_norm, train_new_bias)
+        return apply_op
 
     def _normal_loss(self, logits, labels):
         xent = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
