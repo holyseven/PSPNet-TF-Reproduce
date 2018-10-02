@@ -83,7 +83,7 @@ class PSPNetMG(network_base.Network):
             with tf.device('/gpu:%d' % i):
                 # < valid pixel indice >
                 label = tf.reshape(labels[i], [-1, ])
-                indice = tf.squeeze(tf.where(tf.less(label, self.num_classes)), 1)
+                indice = tf.where(tf.logical_and(tf.less(label, self.num_classes), tf.greater_equal(label, 0)))
                 label = tf.cast(tf.gather(label, indice), tf.int32)
                 num_valide_pixel += tf.shape(label)[0]
 

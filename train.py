@@ -22,12 +22,12 @@ parser.add_argument('--gpu_num', type=int, default=1, help='gpu num')
 
 parser.add_argument('--consider_dilated', type=int, default=0, help='consider dilated conv weights when using L2-SP.')
 parser.add_argument('--network', type=str, default='resnet_v1_50', help='resnet_v1_50 or 101')
-parser.add_argument('--database', type=str, default='SBD', help='SBD, Cityscapes or ADE.')
+parser.add_argument('--database', type=str, default='ADE', help='SBD, Cityscapes or ADE.')
 parser.add_argument('--subsets_for_training', type=str, default='train', help='whether use val set for training')
 parser.add_argument('--batch_size', type=int, default=1, help='batch size')
 parser.add_argument('--weight_decay_mode', type=int, default=1, help='weight decay mode')
-parser.add_argument('--weight_decay_rate', type=float, default=0.01, help='weight decay rate for existing layers')
-parser.add_argument('--weight_decay_rate2', type=float, default=0.01, help='weight decay rate for new layers')
+parser.add_argument('--weight_decay_rate', type=float, default=0.0001, help='weight decay rate for existing layers')
+parser.add_argument('--weight_decay_rate2', type=float, default=0.0001, help='weight decay rate for new layers')
 parser.add_argument('--train_image_size', type=int, default=480, help='spatial size of inputs')
 
 # will rarely change
@@ -415,6 +415,8 @@ def eval(i_ckpt):
     while step < max_iter:
         image, label = cv2.imread(images_filenames[step], 1), cv2.imread(labels_filenames[step], 0)
         label = np.reshape(label, [1, label.shape[0], label.shape[1], 1])
+        if 'ADE' in FLAGS.database:  # the first label (0) of ADE is background.
+            label -= 1
 
         imgsplitter = ImageSplitter(image, 1.0, FLAGS.color_switch, input_size, img_mean)
         feed_dict = {images_pl[0]: imgsplitter.get_split_crops()}

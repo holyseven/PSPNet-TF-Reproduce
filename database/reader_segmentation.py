@@ -66,12 +66,13 @@ def random_crop_and_pad_image_and_labels(image, label, crop_h, crop_w, ignore_la
     offset_width = tf.cond(tf.less(image_shape[1], crop_w),
                            lambda: (crop_w - image_shape[1])//2,
                            lambda: tf.constant(0))
+
+    # padding zeros.
     combined_pad = tf.image.pad_to_bounding_box(combined, offset_height=offset_height, offset_width=offset_width,
                                                 target_height=tf.maximum(crop_h, image_shape[0]),
                                                 target_width=tf.maximum(crop_w, image_shape[1]))
 
     last_image_dim = tf.shape(image)[-1]
-    last_label_dim = tf.shape(label)[-1]
     combined_crop = tf.random_crop(combined_pad, [crop_h, crop_w, 4])
     img_crop = combined_crop[:, :, :last_image_dim]
     label_crop = combined_crop[:, :, last_image_dim:]
@@ -433,6 +434,8 @@ class SegmentationImageReader(object):
         self.image, self.label = generate_crops_for_training(self.queue, self.input_size, self.img_mean,
                                                              random_scale, random_mirror, random_blur, random_rotate,
                                                              color_switch, scale_rate)
+        if 'ADE' in dataset:  # the first label (0) of ADE is background.
+            self.label -= 1
 
     def dequeue(self, batch_size):
         """Pack images and labels (crops) into a batch.
@@ -448,6 +451,9 @@ class SegmentationImageReader(object):
         return image_batch, tf.cast(label_batch, dtype=tf.int32)
 
     def dequeue_without_crops(self, batch_size, height=1024, width=2048):
+
+        raise NotImplementedError
+
         """Output original images and labels.
 
         :param batch_size:
@@ -469,6 +475,6 @@ class SegmentationImageReader(object):
         label.set_shape((height, width, 1))
 
         image_batch, label_batch = tf.train.batch([img, label],
-                                                  batch_size, batch_size * 2, 4 * batch_size)
+                                                  batch_size, batch_size * 3, 32 * batch_size)
         return image_batch, tf.cast(label_batch, dtype=tf.int32)
 
