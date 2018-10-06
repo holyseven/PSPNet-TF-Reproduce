@@ -173,8 +173,12 @@ def conv2d_same(list_input, out_channels, kernel_size, stride, trainable=True,
                     pad_total = kernel_size_effective - 1
                     pad_beg = pad_total // 2
                     pad_end = pad_total - pad_beg
-                    inputs = tf.pad(list_input[i],
-                                    [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
+                    if data_format == 'NCHW':
+                        inputs = tf.pad(list_input[i],
+                                        [[0, 0], [0, 0], [pad_beg, pad_end], [pad_beg, pad_end]])
+                    else:
+                        inputs = tf.pad(list_input[i],
+                                        [[0, 0], [pad_beg, pad_end], [pad_beg, pad_end], [0, 0]])
                     if rate > 1:
                         if data_format == 'NCHW':
                             inputs = tf.transpose(inputs, [0, 2, 3, 1])
@@ -254,7 +258,7 @@ def batch_norm(list_input, stats_mode, data_format='NHWC', float_type=tf.float32
             means.append(batch_mean)
             square_means.append(batch_square_mean)
 
-    with tf.device('/cpu:0'):
+    with tf.device('/cpu:0'):  # if your GPUs have NVLinks and you've install NCCL2, you can change `/cpu:0` to `/gpu:0`
         shape = tf.shape(list_input[0])
         num = shape[0] * shape[1] * shape[2] * len(list_input)
         mean = tf.reduce_mean(means, axis=0)

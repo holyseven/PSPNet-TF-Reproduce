@@ -51,7 +51,7 @@ parser.add_argument('--initializer', type=str, default='he', help='he or xavier'
 parser.add_argument('--optimizer', type=str, default='mom', help='mom, sgd, adam, more to be added')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum for mom optimizer')
 parser.add_argument('--float_type', type=int, default=32, help='float32 or float16')
-parser.add_argument('--data_format', type=str, default='NHWC', help='NHWC or NCHW.')
+parser.add_argument('--data_format', type=str, default='NHWC', help='NHWC or NCHW. does not support NCHW.')
 parser.add_argument('--has_aux_loss', type=int, default=1, help='with(1) or without(0) auxiliary loss')
 parser.add_argument('--poly_lr', type=int, default=1, help='poly learning rate policy')
 parser.add_argument('--new_layer_names', type=str, default=None, help='with(1) or without(0) auxiliary loss')
@@ -69,7 +69,7 @@ parser.add_argument('--save_first_iteration', type=int, default=0, help='whether
 # test or evaluation
 parser.add_argument('--eval_only', type=int, default=0, help='only do the evaluation (1) or do train and eval (0).')
 parser.add_argument('--test_max_iter', type=int, default=None, help='maximum test iteration')
-parser.add_argument('--test_image_size', type=int, default=864,
+parser.add_argument('--test_image_size', type=int, default=480,
                     help='spatial size of inputs for test. not used any longer')
 parser.add_argument('--mirror', type=int, default=1, help='whether adding the results from mirroring.')
 FLAGS = parser.parse_args()

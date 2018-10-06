@@ -9,20 +9,20 @@ import numpy as np
 import cv2
 from database.helper_cityscapes import trainid_to_labelid, coloring
 from database.helper_segmentation import *
-from database.reader_segmentation import SegmentationImageReader
+from database.reader_segmentation import find_data_path
 from experiment_manager.utils import sorted_str_dict
 
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--float_type', type=int, default=32, help='float32 or float16')
-parser.add_argument('--data_format', type=str, default='NHWC', help='NHWC or NCHW.')
 parser.add_argument('--database', type=str, default='Cityscapes', help='Cityscapes or SBD.')
+parser.add_argument('--data_format', type=str, default='NHWC', help='NHWC or NCHW.')
 parser.add_argument('--color_switch', type=int, default=0, help='color switch or not')
-parser.add_argument('--test_max_iter', type=int, default=None, help='maximum test iteration')
 parser.add_argument('--test_image_size', type=int, default=864,
                     help='spatial size of inputs for test. not used any longer')
 parser.add_argument('--mode', type=str, default='val', help='test or val')
 parser.add_argument('--structure_in_paper', type=int, default=0, help='structure in paper')
+parser.add_argument('--image_path', type=str, default=None, help='image to be segmented.')
 
 parser.add_argument('--network', type=str, default='resnet_v1_50', help='resnet_v1_50 or 101')
 parser.add_argument('--weights_ckpt',
@@ -31,15 +31,12 @@ parser.add_argument('--weights_ckpt',
                     help='ckpt file for loading the trained weights')
 parser.add_argument('--coloring', type=int, default=1, help='coloring the prediction and ground truth.')
 parser.add_argument('--mirror', type=int, default=1, help='whether adding the results from mirroring.')
-parser.add_argument('--save_prediction', type=int, default=1, help='whether saving prediction.')
 parser.add_argument('--ms', type=int, default=0, help='whether applying multi-scale testing.')
 
 FLAGS = parser.parse_args()
 
 
-def predict(i_ckpt):
-    assert i_ckpt is not None
-
+def inference(i_ckpt):
     if FLAGS.float_type == 16:
         print('\n< using tf.float16 >\n')
         float_type = tf.float16
@@ -50,20 +47,9 @@ def predict(i_ckpt):
     image_size = FLAGS.test_image_size
     assert FLAGS.test_image_size % 48 == 0
 
-    with tf.device('/cpu:0'):
-        reader = SegmentationImageReader(
-            FLAGS.database,
-            FLAGS.mode,
-            (image_size, image_size),
-            random_scale=False,
-            random_mirror=False,
-            random_blur=False,
-            random_rotate=False,
-            color_switch=FLAGS.color_switch)
-
     images_pl = [tf.placeholder(tf.float32, [None, image_size, image_size, 3])]
-
-    model = pspnet_mg.PSPNetMG(reader.num_classes,
+    data_dir, img_mean, num_classes = find_data_path(FLAGS.database)
+    model = pspnet_mg.PSPNetMG(num_classes,
                                mode='val', resnet=FLAGS.network,
                                data_format=FLAGS.data_format,
                                float_type=float_type,
@@ -81,50 +67,35 @@ def predict(i_ckpt):
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
 
-    loader = tf.train.Saver(max_to_keep=0)
-    loader.restore(sess, i_ckpt)
-    print('Succesfully loaded model from %s.' % i_ckpt)
+    if i_ckpt is not None:
+        loader = tf.train.Saver(max_to_keep=0)
+        loader.restore(sess, i_ckpt)
+        eval_step = i_ckpt.split('-')[-1]
+        print('Succesfully loaded model from %s at step=%s.' % (i_ckpt, eval_step))
 
     print('======================= eval process begins =========================')
-    if FLAGS.save_prediction == 0 and FLAGS.mode != 'test':
-        print('not saving prediction ... ')
-
-    average_loss = 0.0
-    confusion_matrix = np.zeros((reader.num_classes, reader.num_classes), dtype=np.int64)
-
-    if FLAGS.save_prediction == 1 or FLAGS.mode == 'test':
-        try:
-            os.mkdir('./' + FLAGS.mode + '_set')
-        except:
-            pass
-        prefix = './' + FLAGS.mode + '_set'
-        try:
-            os.mkdir(os.path.join(prefix, FLAGS.weights_ckpt.split('/')[-2]))
-        except:
-            pass
-        prefix = os.path.join(prefix, FLAGS.weights_ckpt.split('/')[-2])
+    try:
+        os.mkdir('./inference_set')
+    except:
+        pass
+    prefix = './inference_set'
+    try:
+        os.mkdir(os.path.join(prefix, FLAGS.weights_ckpt.split('/')[-2]))
+    except:
+        pass
+    prefix = os.path.join(prefix, FLAGS.weights_ckpt.split('/')[-2])
 
     if FLAGS.ms == 1:
         scales = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75]
     else:
         scales = [1.0]
 
-    images_filenames = reader.image_list
-    labels_filenames = reader.label_list
-    img_mean = reader.img_mean
-
-    if FLAGS.test_max_iter is None:
-        max_iter = len(images_filenames)
-    else:
-        max_iter = FLAGS.test_max_iter
-
-    step = 0
-    while step < max_iter:
-        image, label = cv2.imread(images_filenames[step], 1), cv2.imread(labels_filenames[step], 0)
-        label = np.reshape(label, [1, label.shape[0], label.shape[1], 1])
+    def inf_one_image(image_path):
+        t0 = datetime.datetime.now()
+        image = cv2.imread(image_path, 1)
         image_height, image_width = image.shape[0], image.shape[1]
 
-        total_logits = np.zeros((image_height, image_width, reader.num_classes), np.float32)
+        total_logits = np.zeros((image_height, image_width, num_classes), np.float32)
         for scale in scales:
             imgsplitter = ImageSplitter(image, scale, FLAGS.color_switch, image_size, img_mean)
             crops = imgsplitter.get_split_crops()
@@ -195,32 +166,32 @@ def predict(i_ckpt):
             total_logits += scale_logits
 
         prediction = np.argmax(total_logits, axis=-1)
-        # print np.max(label), np.max(prediction)
 
-        image_prefix = images_filenames[step].split('/')[-1].split('.')[0] + '_' + FLAGS.weights_ckpt.split('/')[-2]
+        image_prefix = image_path.split('/')[-1].split('.')[0] + '_' + FLAGS.weights_ckpt.split('/')[-2]
         if FLAGS.database == 'Cityscapes':
             cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), trainid_to_labelid(prediction))
-            if FLAGS.coloring == 1:
-                cv2.imwrite(os.path.join(prefix, image_prefix + '_coloring.png'),
-                            cv2.cvtColor(coloring(prediction), cv2.COLOR_BGR2RGB))
+            cv2.imwrite(os.path.join(prefix, image_prefix + '_coloring.png'),
+                        cv2.cvtColor(coloring(prediction), cv2.COLOR_BGR2RGB))
         else:
             cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), prediction)
             # TODO: add coloring for databases other than Cityscapes.
+        delta_t = (datetime.datetime.now() - t0).total_seconds()
+        print('\n[info]\t saved!', delta_t, 'seconds.')
 
-        step += 1
+    if FLAGS.image_path is not None:
+        inf_one_image(FLAGS.image_path)
+    else:
+        while True:
+            image_path = raw_input('Enter the image filename:')
+            try:
+                inf_one_image(image_path)
+            except:
+                continue
 
-        compute_confusion_matrix(label, prediction, confusion_matrix)
-        if step % 20 == 0:
-            print('%s %s] %d / %d. iou updating' \
-                  % (str(datetime.datetime.now()), str(os.getpid()), step, max_iter))
-            compute_iou(confusion_matrix)
-            print(average_loss / step)
-
-    precision = compute_iou(confusion_matrix)
     coord.request_stop()
     coord.join(threads)
 
-    return average_loss / max_iter, precision
+    return
 
 
 def main(_):
@@ -229,10 +200,7 @@ def main(_):
     # ============================================================================
     # ===================== Prediction =========================
     # ============================================================================
-    loss, precision = predict(FLAGS.weights_ckpt)
-    step = FLAGS.weights_ckpt.split('-')[-1]
-    print('%s %s] Step %s Test' % (str(datetime.datetime.now()), str(os.getpid()), step))
-    print('\t loss = %.4f, precision = %.4f' % (loss, precision))
+    inference(FLAGS.weights_ckpt)
 
 
 if __name__ == '__main__':

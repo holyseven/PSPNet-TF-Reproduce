@@ -230,7 +230,7 @@ def pspnet_with_list(images, output_num_classes, bn_mode, has_aux_loss,
         print('stride in each block: ', strides)
         print('channels in each block: ', filters)
 
-    x = images
+    x = utils.input_data(images, data_format)
     # < first block >
     if three_convs_beginning:
         with tf.variable_scope('conv1_1'):
