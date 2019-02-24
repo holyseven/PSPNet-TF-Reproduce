@@ -104,7 +104,7 @@ def get_available_gpus(gpu_num):
         # |    0      8734    C   python                                       11705MiB |
         memory_regex = re.compile(r"[|]\s+?(?P<gpu_id>\d+)\D+?(?P<pid>\d+).+[ ](?P<gpu_memory>\d+)MiB")
         rows = gpu_output.split("\n")
-        result = range(list_available_gpus())
+        result = list(range(list_available_gpus()))
         for row in rows:
             m = memory_regex.search(row)
             if not m:
