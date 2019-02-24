@@ -97,7 +97,6 @@ def conv2d_same(inputs, out_channels, kernel_size, stride, trainable,
     if data_format is 'NCHW':
         in_channels = inputs.get_shape().as_list()[1]
 
-    initializer = tf.contrib.layers.xavier_initializer()
     if initializer is 'he':
         if he_init_std is None:
             n = kernel_size * kernel_size * out_channels
@@ -105,6 +104,8 @@ def conv2d_same(inputs, out_channels, kernel_size, stride, trainable,
         else:
             std = he_init_std
         initializer = tf.random_normal_initializer(stddev=std)
+    else:
+        initializer = tf.contrib.layers.xavier_initializer()
 
     if scope is None:
         scope = 'weights'

@@ -198,14 +198,16 @@ def predict(i_ckpt):
         # print np.max(label), np.max(prediction)
 
         image_prefix = images_filenames[step].split('/')[-1].split('.')[0] + '_' + FLAGS.weights_ckpt.split('/')[-2]
-        if FLAGS.database == 'Cityscapes':
-            cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), trainid_to_labelid(prediction))
-            if FLAGS.coloring == 1:
-                cv2.imwrite(os.path.join(prefix, image_prefix + '_coloring.png'),
-                            cv2.cvtColor(coloring(prediction), cv2.COLOR_BGR2RGB))
-        else:
-            cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), prediction)
-            # TODO: add coloring for databases other than Cityscapes.
+
+        if FLAGS.save_prediction == 1 or FLAGS.mode == 'test':
+            if FLAGS.database == 'Cityscapes':
+                cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), trainid_to_labelid(prediction))
+                if FLAGS.coloring == 1:
+                    cv2.imwrite(os.path.join(prefix, image_prefix + '_coloring.png'),
+                                cv2.cvtColor(coloring(prediction), cv2.COLOR_BGR2RGB))
+            else:
+                cv2.imwrite(os.path.join(prefix, image_prefix + '_prediction.png'), prediction)
+                # TODO: add coloring for databases other than Cityscapes.
 
         step += 1
 

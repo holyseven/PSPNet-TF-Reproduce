@@ -7,6 +7,7 @@ import tensorflow as tf
 from model import pspnet_mg
 import numpy as np
 import cv2
+import glob
 from database.helper_cityscapes import trainid_to_labelid, coloring
 from database.helper_segmentation import *
 from database.reader_segmentation import find_data_path
@@ -179,7 +180,12 @@ def inference(i_ckpt):
         print('\n[info]\t saved!', delta_t, 'seconds.')
 
     if FLAGS.image_path is not None:
-        inf_one_image(FLAGS.image_path)
+        if '*' in FLAGS.image_path:
+            images_path = glob.glob(FLAGS.image_path)
+            for image_path in images_path:
+                inf_one_image(image_path)
+        else:
+            inf_one_image(FLAGS.image_path)
     else:
         while True:
             image_path = raw_input('Enter the image filename:')
