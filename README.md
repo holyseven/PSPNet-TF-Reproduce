@@ -114,19 +114,19 @@ sh download_resnet_v1_101.sh
 ```
 
 A script of training resnet-50 on ADE20K, getting around 41.8 mIoU scores (with single-scale test):
-```python
+```bash
 python ./run.py --network 'resnet_v1_50' --visible_gpus '0,1' --reader_method 'queue' --weight_decay_mode 0 --weight_decay_rate 0.0001 --weight_decay_rate2 0.0001 --database 'ADE' --subsets_for_training 'train' --batch_size 8 --train_image_size 480 --snapshot 10000 --train_max_iter 60000 --test_image_size 480 --fine_tune_filename './z_pretrained_weights/resnet_v1_50.ckpt'
 ```
 
 ### Test and Infer
 
 Test with multi-scale (set `batch_size` as large as you can to speed up).
-```python
+```bash
 python predict.py --visible_gpus '0' --network 'resnet_v1_101' --database 'ADE' --weights_ckpt './log/ADE/PSP-resnet_v1_101-gpu_num2-batch_size8-lrn_rate0.01-random_scale1-random_rotate1-480-60000-train-1-0.0001-0.001-0-0-1-1/snapshot/model.ckpt-60000' --test_subset 'val' --test_image_size 480 --batch_size 8 --ms 1 --mirror 1
 ```
 
 Infer one image (with multi-scale).
-```python
+```bash
 python demo_infer.py --database 'Cityscapes' --network 'resnet_v1_101' --weights_ckpt './log/Cityscapes/old/model.ckpt-50000' --test_image_size 864 --batch_size 4 --ms 1
 ```
 
