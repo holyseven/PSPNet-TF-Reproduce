@@ -28,10 +28,7 @@ def chunks(l, n):
 
 def get_model_id():
     FLAGS_dict = FLAGS.__dict__
-    model_id = 'PSP-' + str(FLAGS_dict['network'])
-    if 'z_pretrained_weights' not in FLAGS_dict['fine_tune_filename']:
-        model_id += '-continue-'
-
+    model_id = FLAGS_dict['prefix'] + '-' + str(FLAGS_dict['network'])
     model_id += '-gpu_num' + str(gpu_num())
 
     model_arguments = ['batch_size', 'lrn_rate', 'random_scale', 'random_rotate']

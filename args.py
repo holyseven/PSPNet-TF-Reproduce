@@ -2,10 +2,11 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument('--prefix', type=str, default='PSP', help='prefix for model id.')
 parser.add_argument('--visible_gpus', type=str, default='0', help='0,1,2')
 
 # < reader_method: 'queue' is faster for training based on my experiments. >
-parser.add_argument('--reader_method', type=str, default='queue', help='reading *images* directly or *queue*')
+parser.add_argument('--reader_method', type=str, default='queue', help='reading *images* by tf.data or *queue*')
 parser.add_argument('--database', type=str, default='Cityscapes', help='SBD, Cityscapes or ADE.')
 parser.add_argument('--network', type=str, default='resnet_v1_101', help='resnet_v1_50 or 101')
 parser.add_argument('--subsets_for_training', type=str, default='train', help='whether use val set for training')

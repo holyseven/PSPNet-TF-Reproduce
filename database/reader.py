@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 import math
-from database import helper, create_tf_records
+from database import helper
 from tensorflow.contrib.image import rotate
 import glob
 

@@ -30,10 +30,14 @@ def predict(i_ckpt):
 
     reader_init = []
     with tf.device('/cpu:0'):
-        eval_image_reader = reader.ImageReader(FLAGS.database, FLAGS.test_subset)
-        eval_reader_iterator = eval_image_reader.get_eval_iterator(FLAGS.color_switch)
-        eval_image, eval_label, eval_image_filename = eval_reader_iterator.get_next()  # one image.
-        reader_init.append(eval_reader_iterator.initializer)
+        if FLAGS.reader_method == 'queue':
+            eval_image_reader = reader.QueueBasedImageReader(FLAGS.database, FLAGS.test_subset)
+            eval_image, eval_label, eval_image_filename = eval_image_reader.get_eval_batch(FLAGS.color_switch)
+        else:
+            eval_image_reader = reader.ImageReader(FLAGS.database, FLAGS.test_subset)
+            eval_reader_iterator = eval_image_reader.get_eval_iterator(FLAGS.color_switch)
+            eval_image, eval_label, eval_image_filename = eval_reader_iterator.get_next()  # one image.
+            reader_init.append(eval_reader_iterator.initializer)
 
     crop_size = FLAGS.test_image_size
     # < network >
@@ -47,6 +51,11 @@ def predict(i_ckpt):
     gpu_options = tf.GPUOptions(allow_growth=False)
     config = tf.ConfigProto(log_device_placement=False, gpu_options=gpu_options, allow_soft_placement=True)
     sess = tf.Session(config=config)
+
+    if FLAGS.reader_method == 'queue':
+        coord = tf.train.Coordinator()
+        threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+
     init = [tf.global_variables_initializer(), tf.local_variables_initializer()] + reader_init
     sess.run(init)
 
@@ -161,6 +170,10 @@ def predict(i_ckpt):
     for i in range(confusion_matrix.shape[0]):
         f_log.write(str(ious[i]) + '\n')
     f_log.write(str(miou) + '\n')
+
+    if FLAGS.reader_method == 'queue':
+        coord.request_stop()
+        coord.join(threads)
 
     return
 

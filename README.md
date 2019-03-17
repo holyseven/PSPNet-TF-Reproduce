@@ -85,12 +85,12 @@ _I do not know if this is the first implementation of sync batch norm in Tensorf
    <tr>
       <td rowspan="2">ADE20K</td>
       <td>ResNet-50</td>
-      <td>41.81/?</td>
+      <td>41.92/43.09</td>
       <td></td>
    </tr>
    <tr>
       <td>ResNet-101</td>
-      <td></td>
+      <td>42.80/?</td>
       <td></td>
    </tr>
 </table>
@@ -107,15 +107,17 @@ _I do not know if this is the first implementation of sync batch norm in Tensorf
 
 Download the databases with the links: [ADE20K](http://data.csail.mit.edu/places/ADEchallenge/ADEChallengeData2016.zip), [SBD (Augmented Pascal VOC)](https://github.com/holyseven/PSPNet-TF-Reproduce/issues/12#issuecomment-428876239) and [Cityscapes](https://www.cityscapes-dataset.com/).
 
+Prepare the database for Cityscapes by generating `*labelTrainIds.png` images with  [createTrainIdLabelImgs](https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/preparation/createTrainIdLabelImgs.py), and then change the code in [database/reader.py](https://github.com/holyseven/PSPNet-TF-Reproduce/blob/master/database/reader.py#L36) or move undersired images to other directory.
+
 Download pretrained models.
 ```bash
 cd z_pretrained_weights
 sh download_resnet_v1_101.sh
 ```
 
-A script of training resnet-50 on ADE20K, getting around 41.8 mIoU scores (with single-scale test):
+A script of training resnet-50 on ADE20K, getting around 41.92 mIoU scores (with single-scale test):
 ```bash
-python ./run.py --network 'resnet_v1_50' --visible_gpus '0,1' --reader_method 'queue' --weight_decay_mode 0 --weight_decay_rate 0.0001 --weight_decay_rate2 0.0001 --database 'ADE' --subsets_for_training 'train' --batch_size 8 --train_image_size 480 --snapshot 10000 --train_max_iter 60000 --test_image_size 480 --fine_tune_filename './z_pretrained_weights/resnet_v1_50.ckpt'
+python ./run.py --network 'resnet_v1_50' --visible_gpus '0,1' --reader_method 'queue' --lrn_rate 0.01 --weight_decay_mode 0 --weight_decay_rate 0.0001 --weight_decay_rate2 0.001 --database 'ADE' --subsets_for_training 'train' --batch_size 8 --train_image_size 480 --snapshot 30000 --train_max_iter 90000 --test_image_size 480 --random_rotate 0 --fine_tune_filename './z_pretrained_weights/resnet_v1_50.ckpt'
 ```
 
 ### Test and Infer
