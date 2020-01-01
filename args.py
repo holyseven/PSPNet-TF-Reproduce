@@ -54,8 +54,8 @@ parser.add_argument('--weights_ckpt',
                     default='/home/jacques/tf_workspace/PSPNet-TF/log/Cityscapes/old/model.ckpt-50000',
                     help='ckpt file for loading the trained weights')
 parser.add_argument('--test_subset', type=str, default='val', help='test or val')
-parser.add_argument('--test_image_size', type=int, default=864,
-                    help='spatial size of inputs for test. not used any longer')
+parser.add_argument('--test_image_size', type=int, default=480,
+                    help='spatial size of inputs for test. should be the same as train_image_size in most situations.')
 parser.add_argument('--ms', type=int, default=0, help='whether applying multi-scale testing.')
 parser.add_argument('--mirror', type=int, default=1, help='whether adding the results from mirroring.')
 parser.add_argument('--coloring', type=int, default=1, help='coloring the prediction and ground truth.')
