@@ -1,5 +1,7 @@
 # Training Reproduce of PSPNet.
 
+(Updated 2021/04/09. Authors of PSPNet have provided a Pytorch implementation for PSPNet and their new work with supporting Sync Batch Norm, see https://github.com/hszhao/semseg.)
+
 (Updated 2019/02/26. A major change of code structure. For the version before, checkout v0.9 https://github.com/holyseven/PSPNet-TF-Reproduce/tree/v0.9.)
 
 This is an implementation of PSPNet (from training to test) in pure Tensorflow library (**tested on TF1.12, Python 3**).
